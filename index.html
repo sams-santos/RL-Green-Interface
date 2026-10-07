@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Green RL Playground — V1</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="data/results.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">Interactive experiment viewer</div>
+      <h1>Green RL Playground</h1>
+      <p>Explore pre-computed reinforcement learning experiments and their energy-performance trade-offs.</p>
+    </div>
+    <div class="status-pill" id="status-pill">Ready</div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="panel">
+        <h2>Experiment</h2>
+
+        <label for="run-select">Run</label>
+        <select id="run-select"></select>
+
+        <div class="parameter-grid">
+          <div><span>Algorithm</span><strong id="p-algorithm">—</strong></div>
+          <div><span>Instance</span><strong id="p-instance">—</strong></div>
+          <div><span>Problem size</span><strong id="p-size">—</strong></div>
+          <div><span>Seed</span><strong id="p-seed">—</strong></div>
+          <div><span>Learning rate</span><strong id="p-learning-rate">—</strong></div>
+          <div><span>Gamma</span><strong id="p-gamma">—</strong></div>
+          <div><span>Epsilon</span><strong id="p-epsilon">—</strong></div>
+          <div><span>Patience</span><strong id="p-patience">—</strong></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Playback</h2>
+        <div class="button-row">
+          <button id="play-btn">▶ Play</button>
+          <button id="pause-btn" class="secondary">Ⅱ Pause</button>
+          <button id="reset-btn" class="secondary">↻ Reset</button>
+        </div>
+
+        <label for="speed-range">Episode delay</label>
+        <input id="speed-range" type="range" min="100" max="1500" value="500" step="50" />
+        <div class="range-value"><span>Fast</span><span id="speed-value">500 ms</span><span>Slow</span></div>
+      </section>
+
+      <section class="panel">
+        <h2>Episode</h2>
+        <div class="episode-number" id="episode-number">0</div>
+        <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+      </section>
+
+      <section class="panel note">
+        <h2>Data model</h2>
+        <p>This playground does not run RL and does not calculate energy. It only reads and visualizes pre-computed experiment results.</p>
+      </section>
+    </aside>
+
+    <section class="content">
+      <section class="metrics-grid">
+        <div class="metric-card"><span>Best distance</span><strong id="metric-distance">—</strong><small>lower is better</small></div>
+        <div class="metric-card"><span>Total energy</span><strong id="metric-energy">—</strong><small>pre-computed</small></div>
+        <div class="metric-card"><span>Total time</span><strong id="metric-time">—</strong><small>pre-computed</small></div>
+        <div class="metric-card"><span>Best episode</span><strong id="metric-episode">—</strong><small>pre-computed</small></div>
+      </section>
+
+      <section class="panel large-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Environment</h2>
+            <p id="route-caption">Pre-computed route for the selected episode.</p>
+          </div>
+          <div class="legend">
+            <span><i class="dot current"></i>Current route</span>
+            <span><i class="dot best"></i>Best route</span>
+          </div>
+        </div>
+        <div id="route-chart" class="route-chart"></div>
+      </section>
+
+      <section class="charts-grid">
+        <section class="panel chart-panel"><h2>Distance / Episode</h2><div id="distance-chart"></div></section>
+        <section class="panel chart-panel"><h2>Reward / Episode</h2><div id="reward-chart"></div></section>
+        <section class="panel chart-panel"><h2>Energy / Episode</h2><div id="energy-chart"></div></section>
+        <section class="panel chart-panel"><h2>Epsilon / Episode</h2><div id="epsilon-chart"></div></section>
+      </section>
+
+      <section class="panel table-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Episode data</h2>
+            <p>Rows come directly from the selected pre-computed run.</p>
+          </div>
+          <button id="export-btn" class="secondary">Export CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Episode</th>
+                <th>Reward</th>
+                <th>Distance</th>
+                <th>Energy (J)</th>
+                <th>Time (s)</th>
+                <th>Epsilon</th>
+                <th>Converged</th>
+              </tr>
+            </thead>
+            <tbody id="episode-table"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer>
+    Green RL Playground V1 · Static HTML + CSS + JavaScript + D3.js
+  </footer>
+
+  <script src="js/charts.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
