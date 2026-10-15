@@ -18,7 +18,7 @@ The URL keeps the current view (tab, run, episode, country), so a view can be sh
 
 ## Tabs
 
-The views are listed in the menu on the left; each opens under a title bar that also shows the playback status. The look (olive page, sage frame, cream cards, dark-green buttons, yellow insights card) follows the first version of ECOVIS, built for machine-learning models by Laís C. Medeiros and Samara Santos (2025), and adapted here to reinforcement learning.
+The views are listed in the menu on the left; each opens under a title bar that also shows the playback status. The look (olive page, sage frame, cream cards, dark-green buttons, yellow insights card) follows the first version of ECOVIS, built for machine-learning models by Laís C. Medeiros and Samara Santos through a design study with expert interviews ([Santos et al., CGVC 2026](https://doi.org/10.2312/cgvc.20261003)), and adapted here to reinforcement learning.
 
 **Explore a run.** Pick one configuration and replay its episodes:
 
@@ -190,7 +190,6 @@ Run them again after changing their inputs. An equivalent's `icon` and `badge` m
 
 ```
 index.html                   page (Explore, Compare, and Concepts & references tabs)
-docs/                        study material (PDF): code guide and technical foundations
 assets/                      ECOVIS logo and favicon
 css/style.css                flat, light pastel theme (chart colours checked for colour-blind readers)
 js/config.js                 parameter grid and run ids
@@ -221,7 +220,7 @@ tools/build_world.py         -> data/world.js
 
 [![CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-© 2026 Samara Santos. Based on the first version of ECOVIS (2025) by Laís C. Medeiros and Samara Santos, who created its name, logo and visual design. Licensed under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/). See [LICENSE](LICENSE) for the full text.
+© 2026 Samara Santos. Based on the first version of ECOVIS by Laís C. Medeiros and Samara Santos, who created its name, logo and visual design ([Santos et al., CGVC 2026](https://doi.org/10.2312/cgvc.20261003)). Licensed under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/). See [LICENSE](LICENSE) for the full text.
 
 - **Use, share and adapt freely** for non-commercial purposes.
 - **No commercial use.** You may not sell this work or anything derived from it, or use either to make a profit.
