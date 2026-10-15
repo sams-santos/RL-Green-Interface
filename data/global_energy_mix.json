@@ -1,0 +1,1274 @@
+{
+  "ABW": {
+    "country_name": "Aruba",
+    "iso_alpha2": "AW",
+    "carbon_intensity": 561.224,
+    "year": 2022
+  },
+  "AFG": {
+    "country_name": "Afghanistan",
+    "iso_alpha2": "AF",
+    "carbon_intensity": 132.53,
+    "year": 2022
+  },
+  "AGO": {
+    "country_name": "Angola",
+    "iso_alpha2": "AO",
+    "carbon_intensity": 174.734,
+    "year": 2022
+  },
+  "ALB": {
+    "country_name": "Albania",
+    "iso_alpha2": "AL",
+    "carbon_intensity": 24.286,
+    "year": 2022
+  },
+  "ARE": {
+    "country_name": "United Arab Emirates",
+    "iso_alpha2": "AE",
+    "carbon_intensity": 561.135,
+    "year": 2022
+  },
+  "ARG": {
+    "country_name": "Argentina",
+    "iso_alpha2": "AR",
+    "carbon_intensity": 354.103,
+    "year": 2023
+  },
+  "ARM": {
+    "country_name": "Armenia",
+    "iso_alpha2": "AM",
+    "carbon_intensity": 264.538,
+    "year": 2022
+  },
+  "ASM": {
+    "country_name": "American Samoa",
+    "iso_alpha2": "AS",
+    "carbon_intensity": 611.111,
+    "year": 2022
+  },
+  "ATG": {
+    "country_name": "Antigua and Barbuda",
+    "iso_alpha2": "AG",
+    "carbon_intensity": 611.111,
+    "year": 2022
+  },
+  "AUS": {
+    "country_name": "Australia",
+    "iso_alpha2": "AU",
+    "carbon_intensity": 548.692,
+    "year": 2023
+  },
+  "AUT": {
+    "country_name": "Austria",
+    "iso_alpha2": "AT",
+    "carbon_intensity": 110.812,
+    "year": 2023
+  },
+  "AZE": {
+    "country_name": "Azerbaijan",
+    "iso_alpha2": "AZ",
+    "carbon_intensity": 671.389,
+    "year": 2022
+  },
+  "BDI": {
+    "country_name": "Burundi",
+    "iso_alpha2": "BI",
+    "carbon_intensity": 250.0,
+    "year": 2022
+  },
+  "BEL": {
+    "country_name": "Belgium",
+    "iso_alpha2": "BE",
+    "carbon_intensity": 138.107,
+    "year": 2023
+  },
+  "BEN": {
+    "country_name": "Benin",
+    "iso_alpha2": "BJ",
+    "carbon_intensity": 584.071,
+    "year": 2022
+  },
+  "BFA": {
+    "country_name": "Burkina Faso",
+    "iso_alpha2": "BF",
+    "carbon_intensity": 467.533,
+    "year": 2022
+  },
+  "BGD": {
+    "country_name": "Bangladesh",
+    "iso_alpha2": "BD",
+    "carbon_intensity": 691.411,
+    "year": 2023
+  },
+  "BGR": {
+    "country_name": "Bulgaria",
+    "iso_alpha2": "BG",
+    "carbon_intensity": 335.334,
+    "year": 2023
+  },
+  "BHR": {
+    "country_name": "Bahrain",
+    "iso_alpha2": "BH",
+    "carbon_intensity": 904.615,
+    "year": 2022
+  },
+  "BHS": {
+    "country_name": "Bahamas",
+    "iso_alpha2": "BS",
+    "carbon_intensity": 660.099,
+    "year": 2022
+  },
+  "BIH": {
+    "country_name": "Bosnia and Herzegovina",
+    "iso_alpha2": "BA",
+    "carbon_intensity": 600.0,
+    "year": 2023
+  },
+  "BLR": {
+    "country_name": "Belarus",
+    "iso_alpha2": "BY",
+    "carbon_intensity": 441.74,
+    "year": 2022
+  },
+  "BLZ": {
+    "country_name": "Belize",
+    "iso_alpha2": "BZ",
+    "carbon_intensity": 225.806,
+    "year": 2022
+  },
+  "BMU": {
+    "country_name": "Bermuda",
+    "iso_alpha2": "BM",
+    "carbon_intensity": 650.794,
+    "year": 2022
+  },
+  "BOL": {
+    "country_name": "Bolivia",
+    "iso_alpha2": "BO",
+    "carbon_intensity": 531.687,
+    "year": 2023
+  },
+  "BRA": {
+    "country_name": "Brazil",
+    "iso_alpha2": "BR",
+    "carbon_intensity": 98.348,
+    "year": 2023
+  },
+  "BRB": {
+    "country_name": "Barbados",
+    "iso_alpha2": "BB",
+    "carbon_intensity": 605.505,
+    "year": 2022
+  },
+  "BRN": {
+    "country_name": "Brunei",
+    "iso_alpha2": "BN",
+    "carbon_intensity": 893.913,
+    "year": 2022
+  },
+  "BTN": {
+    "country_name": "Bhutan",
+    "iso_alpha2": "BT",
+    "carbon_intensity": 23.333,
+    "year": 2022
+  },
+  "BWA": {
+    "country_name": "Botswana",
+    "iso_alpha2": "BW",
+    "carbon_intensity": 847.909,
+    "year": 2022
+  },
+  "CAN": {
+    "country_name": "Canada",
+    "iso_alpha2": "CA",
+    "carbon_intensity": 170.043,
+    "year": 2023
+  },
+  "CHE": {
+    "country_name": "Switzerland",
+    "iso_alpha2": "CH",
+    "carbon_intensity": 34.843,
+    "year": 2023
+  },
+  "CHL": {
+    "country_name": "Chile",
+    "iso_alpha2": "CL",
+    "carbon_intensity": 291.113,
+    "year": 2023
+  },
+  "CHN": {
+    "country_name": "China",
+    "iso_alpha2": "CN",
+    "carbon_intensity": 582.317,
+    "year": 2023
+  },
+  "CIV": {
+    "country_name": "Cote d'Ivoire",
+    "iso_alpha2": "CI",
+    "carbon_intensity": 393.885,
+    "year": 2022
+  },
+  "CMR": {
+    "country_name": "Cameroon",
+    "iso_alpha2": "CM",
+    "carbon_intensity": 305.419,
+    "year": 2022
+  },
+  "COD": {
+    "country_name": "Democratic Republic of Congo",
+    "iso_alpha2": "CD",
+    "carbon_intensity": 24.457,
+    "year": 2022
+  },
+  "COG": {
+    "country_name": "Congo",
+    "iso_alpha2": "CG",
+    "carbon_intensity": 700.0,
+    "year": 2022
+  },
+  "COK": {
+    "country_name": "Cook Islands",
+    "iso_alpha2": "CK",
+    "carbon_intensity": 250.0,
+    "year": 2022
+  },
+  "COL": {
+    "country_name": "Colombia",
+    "iso_alpha2": "CO",
+    "carbon_intensity": 259.511,
+    "year": 2023
+  },
+  "COM": {
+    "country_name": "Comoros",
+    "iso_alpha2": "KM",
+    "carbon_intensity": 642.857,
+    "year": 2022
+  },
+  "CPV": {
+    "country_name": "Cape Verde",
+    "iso_alpha2": "CV",
+    "carbon_intensity": 558.14,
+    "year": 2022
+  },
+  "CRI": {
+    "country_name": "Costa Rica",
+    "iso_alpha2": "CR",
+    "carbon_intensity": 53.378,
+    "year": 2023
+  },
+  "CUB": {
+    "country_name": "Cuba",
+    "iso_alpha2": "CU",
+    "carbon_intensity": 637.61,
+    "year": 2022
+  },
+  "CYM": {
+    "country_name": "Cayman Islands",
+    "iso_alpha2": "KY",
+    "carbon_intensity": 642.857,
+    "year": 2022
+  },
+  "CYP": {
+    "country_name": "Cyprus",
+    "iso_alpha2": "CY",
+    "carbon_intensity": 534.323,
+    "year": 2023
+  },
+  "CZE": {
+    "country_name": "Czechia",
+    "iso_alpha2": "CZ",
+    "carbon_intensity": 449.724,
+    "year": 2023
+  },
+  "DEU": {
+    "country_name": "Germany",
+    "iso_alpha2": "DE",
+    "carbon_intensity": 380.95,
+    "year": 2023
+  },
+  "DJI": {
+    "country_name": "Djibouti",
+    "iso_alpha2": "DJ",
+    "carbon_intensity": 692.308,
+    "year": 2022
+  },
+  "DMA": {
+    "country_name": "Dominica",
+    "iso_alpha2": "DM",
+    "carbon_intensity": 529.412,
+    "year": 2022
+  },
+  "DNK": {
+    "country_name": "Denmark",
+    "iso_alpha2": "DK",
+    "carbon_intensity": 151.65,
+    "year": 2023
+  },
+  "DOM": {
+    "country_name": "Dominican Republic",
+    "iso_alpha2": "DO",
+    "carbon_intensity": 580.78,
+    "year": 2022
+  },
+  "DZA": {
+    "country_name": "Algeria",
+    "iso_alpha2": "DZ",
+    "carbon_intensity": 634.611,
+    "year": 2022
+  },
+  "ECU": {
+    "country_name": "Ecuador",
+    "iso_alpha2": "EC",
+    "carbon_intensity": 150.224,
+    "year": 2023
+  },
+  "EGY": {
+    "country_name": "Egypt",
+    "iso_alpha2": "EG",
+    "carbon_intensity": 570.306,
+    "year": 2023
+  },
+  "ERI": {
+    "country_name": "Eritrea",
+    "iso_alpha2": "ER",
+    "carbon_intensity": 631.579,
+    "year": 2022
+  },
+  "ESH": {
+    "country_name": "Western Sahara",
+    "iso_alpha2": "EH",
+    "carbon_intensity": 666.667,
+    "year": 2009
+  },
+  "ESP": {
+    "country_name": "Spain",
+    "iso_alpha2": "ES",
+    "carbon_intensity": 174.05,
+    "year": 2023
+  },
+  "EST": {
+    "country_name": "Estonia",
+    "iso_alpha2": "EE",
+    "carbon_intensity": 416.667,
+    "year": 2023
+  },
+  "ETH": {
+    "country_name": "Ethiopia",
+    "iso_alpha2": "ET",
+    "carbon_intensity": 24.643,
+    "year": 2022
+  },
+  "FIN": {
+    "country_name": "Finland",
+    "iso_alpha2": "FI",
+    "carbon_intensity": 79.158,
+    "year": 2023
+  },
+  "FJI": {
+    "country_name": "Fiji",
+    "iso_alpha2": "FJ",
+    "carbon_intensity": 288.462,
+    "year": 2022
+  },
+  "FLK": {
+    "country_name": "Falkland Islands",
+    "iso_alpha2": "FK",
+    "carbon_intensity": 500.0,
+    "year": 2022
+  },
+  "FRA": {
+    "country_name": "France",
+    "iso_alpha2": "FR",
+    "carbon_intensity": 56.039,
+    "year": 2023
+  },
+  "FRO": {
+    "country_name": "Faroe Islands",
+    "iso_alpha2": "FO",
+    "carbon_intensity": 404.762,
+    "year": 2022
+  },
+  "GAB": {
+    "country_name": "Gabon",
+    "iso_alpha2": "GA",
+    "carbon_intensity": 491.597,
+    "year": 2022
+  },
+  "GBR": {
+    "country_name": "United Kingdom",
+    "iso_alpha2": "GB",
+    "carbon_intensity": 237.589,
+    "year": 2023
+  },
+  "GEO": {
+    "country_name": "Georgia",
+    "iso_alpha2": "GE",
+    "carbon_intensity": 167.594,
+    "year": 2023
+  },
+  "GHA": {
+    "country_name": "Ghana",
+    "iso_alpha2": "GH",
+    "carbon_intensity": 484.0,
+    "year": 2022
+  },
+  "GIB": {
+    "country_name": "Gibraltar",
+    "iso_alpha2": "GI",
+    "carbon_intensity": 600.0,
+    "year": 2022
+  },
+  "GIN": {
+    "country_name": "Guinea",
+    "iso_alpha2": "GN",
+    "carbon_intensity": 236.842,
+    "year": 2022
+  },
+  "GLP": {
+    "country_name": "Guadeloupe",
+    "iso_alpha2": "GP",
+    "carbon_intensity": 500.0,
+    "year": 2021
+  },
+  "GMB": {
+    "country_name": "Gambia",
+    "iso_alpha2": "GM",
+    "carbon_intensity": 666.667,
+    "year": 2022
+  },
+  "GNB": {
+    "country_name": "Guinea-Bissau",
+    "iso_alpha2": "GW",
+    "carbon_intensity": 625.0,
+    "year": 2022
+  },
+  "GNQ": {
+    "country_name": "Equatorial Guinea",
+    "iso_alpha2": "GQ",
+    "carbon_intensity": 591.837,
+    "year": 2022
+  },
+  "GRC": {
+    "country_name": "Greece",
+    "iso_alpha2": "GR",
+    "carbon_intensity": 336.574,
+    "year": 2023
+  },
+  "GRD": {
+    "country_name": "Grenada",
+    "iso_alpha2": "GD",
+    "carbon_intensity": 640.0,
+    "year": 2022
+  },
+  "GRL": {
+    "country_name": "Greenland",
+    "iso_alpha2": "GL",
+    "carbon_intensity": 178.571,
+    "year": 2022
+  },
+  "GTM": {
+    "country_name": "Guatemala",
+    "iso_alpha2": "GT",
+    "carbon_intensity": 328.268,
+    "year": 2022
+  },
+  "GUF": {
+    "country_name": "French Guiana",
+    "iso_alpha2": "GF",
+    "carbon_intensity": 217.822,
+    "year": 2021
+  },
+  "GUM": {
+    "country_name": "Guam",
+    "iso_alpha2": "GU",
+    "carbon_intensity": 622.857,
+    "year": 2022
+  },
+  "GUY": {
+    "country_name": "Guyana",
+    "iso_alpha2": "GY",
+    "carbon_intensity": 640.351,
+    "year": 2022
+  },
+  "HKG": {
+    "country_name": "Hong Kong",
+    "iso_alpha2": "HK",
+    "carbon_intensity": 699.499,
+    "year": 2022
+  },
+  "HND": {
+    "country_name": "Honduras",
+    "iso_alpha2": "HN",
+    "carbon_intensity": 282.265,
+    "year": 2022
+  },
+  "HRV": {
+    "country_name": "Croatia",
+    "iso_alpha2": "HR",
+    "carbon_intensity": 204.962,
+    "year": 2023
+  },
+  "HTI": {
+    "country_name": "Haiti",
+    "iso_alpha2": "HT",
+    "carbon_intensity": 567.308,
+    "year": 2022
+  },
+  "HUN": {
+    "country_name": "Hungary",
+    "iso_alpha2": "HU",
+    "carbon_intensity": 204.19,
+    "year": 2023
+  },
+  "IDN": {
+    "country_name": "Indonesia",
+    "iso_alpha2": "ID",
+    "carbon_intensity": 675.931,
+    "year": 2022
+  },
+  "IND": {
+    "country_name": "India",
+    "iso_alpha2": "IN",
+    "carbon_intensity": 713.441,
+    "year": 2023
+  },
+  "IRL": {
+    "country_name": "Ireland",
+    "iso_alpha2": "IE",
+    "carbon_intensity": 290.805,
+    "year": 2023
+  },
+  "IRN": {
+    "country_name": "Iran",
+    "iso_alpha2": "IR",
+    "carbon_intensity": 655.125,
+    "year": 2023
+  },
+  "IRQ": {
+    "country_name": "Iraq",
+    "iso_alpha2": "IQ",
+    "carbon_intensity": 688.814,
+    "year": 2022
+  },
+  "ISL": {
+    "country_name": "Iceland",
+    "iso_alpha2": "IS",
+    "carbon_intensity": 27.68,
+    "year": 2022
+  },
+  "ISR": {
+    "country_name": "Israel",
+    "iso_alpha2": "IL",
+    "carbon_intensity": 582.927,
+    "year": 2022
+  },
+  "ITA": {
+    "country_name": "Italy",
+    "iso_alpha2": "IT",
+    "carbon_intensity": 330.718,
+    "year": 2023
+  },
+  "JAM": {
+    "country_name": "Jamaica",
+    "iso_alpha2": "JM",
+    "carbon_intensity": 555.556,
+    "year": 2022
+  },
+  "JOR": {
+    "country_name": "Jordan",
+    "iso_alpha2": "JO",
+    "carbon_intensity": 540.924,
+    "year": 2022
+  },
+  "JPN": {
+    "country_name": "Japan",
+    "iso_alpha2": "JP",
+    "carbon_intensity": 485.392,
+    "year": 2023
+  },
+  "KAZ": {
+    "country_name": "Kazakhstan",
+    "iso_alpha2": "KZ",
+    "carbon_intensity": 821.391,
+    "year": 2023
+  },
+  "KEN": {
+    "country_name": "Kenya",
+    "iso_alpha2": "KE",
+    "carbon_intensity": 70.492,
+    "year": 2023
+  },
+  "KGZ": {
+    "country_name": "Kyrgyzstan",
+    "iso_alpha2": "KG",
+    "carbon_intensity": 147.292,
+    "year": 2022
+  },
+  "KHM": {
+    "country_name": "Cambodia",
+    "iso_alpha2": "KH",
+    "carbon_intensity": 417.707,
+    "year": 2022
+  },
+  "KIR": {
+    "country_name": "Kiribati",
+    "iso_alpha2": "KI",
+    "carbon_intensity": 666.667,
+    "year": 2022
+  },
+  "KNA": {
+    "country_name": "Saint Kitts and Nevis",
+    "iso_alpha2": "KN",
+    "carbon_intensity": 636.364,
+    "year": 2022
+  },
+  "KOR": {
+    "country_name": "South Korea",
+    "iso_alpha2": "KR",
+    "carbon_intensity": 430.567,
+    "year": 2023
+  },
+  "KWT": {
+    "country_name": "Kuwait",
+    "iso_alpha2": "KW",
+    "carbon_intensity": 649.163,
+    "year": 2023
+  },
+  "LAO": {
+    "country_name": "Laos",
+    "iso_alpha2": "LA",
+    "carbon_intensity": 265.506,
+    "year": 2022
+  },
+  "LBN": {
+    "country_name": "Lebanon",
+    "iso_alpha2": "LB",
+    "carbon_intensity": 599.005,
+    "year": 2022
+  },
+  "LBR": {
+    "country_name": "Liberia",
+    "iso_alpha2": "LR",
+    "carbon_intensity": 227.848,
+    "year": 2022
+  },
+  "LBY": {
+    "country_name": "Libya",
+    "iso_alpha2": "LY",
+    "carbon_intensity": 818.692,
+    "year": 2022
+  },
+  "LCA": {
+    "country_name": "Saint Lucia",
+    "iso_alpha2": "LC",
+    "carbon_intensity": 666.667,
+    "year": 2022
+  },
+  "LKA": {
+    "country_name": "Sri Lanka",
+    "iso_alpha2": "LK",
+    "carbon_intensity": 509.781,
+    "year": 2022
+  },
+  "LSO": {
+    "country_name": "Lesotho",
+    "iso_alpha2": "LS",
+    "carbon_intensity": 20.0,
+    "year": 2022
+  },
+  "LTU": {
+    "country_name": "Lithuania",
+    "iso_alpha2": "LT",
+    "carbon_intensity": 160.072,
+    "year": 2023
+  },
+  "LUX": {
+    "country_name": "Luxembourg",
+    "iso_alpha2": "LU",
+    "carbon_intensity": 105.263,
+    "year": 2023
+  },
+  "LVA": {
+    "country_name": "Latvia",
+    "iso_alpha2": "LV",
+    "carbon_intensity": 123.2,
+    "year": 2023
+  },
+  "MAC": {
+    "country_name": "Macao",
+    "iso_alpha2": "MO",
+    "carbon_intensity": 448.98,
+    "year": 2022
+  },
+  "MAR": {
+    "country_name": "Morocco",
+    "iso_alpha2": "MA",
+    "carbon_intensity": 630.014,
+    "year": 2023
+  },
+  "MDA": {
+    "country_name": "Moldova",
+    "iso_alpha2": "MD",
+    "carbon_intensity": 643.464,
+    "year": 2023
+  },
+  "MDG": {
+    "country_name": "Madagascar",
+    "iso_alpha2": "MG",
+    "carbon_intensity": 436.441,
+    "year": 2022
+  },
+  "MDV": {
+    "country_name": "Maldives",
+    "iso_alpha2": "MV",
+    "carbon_intensity": 611.765,
+    "year": 2022
+  },
+  "MEX": {
+    "country_name": "Mexico",
+    "iso_alpha2": "MX",
+    "carbon_intensity": 507.245,
+    "year": 2023
+  },
+  "MKD": {
+    "country_name": "North Macedonia",
+    "iso_alpha2": "MK",
+    "carbon_intensity": 565.345,
+    "year": 2023
+  },
+  "MLI": {
+    "country_name": "Mali",
+    "iso_alpha2": "ML",
+    "carbon_intensity": 408.0,
+    "year": 2022
+  },
+  "MLT": {
+    "country_name": "Malta",
+    "iso_alpha2": "MT",
+    "carbon_intensity": 459.144,
+    "year": 2023
+  },
+  "MMR": {
+    "country_name": "Myanmar",
+    "iso_alpha2": "MM",
+    "carbon_intensity": 398.898,
+    "year": 2023
+  },
+  "MNE": {
+    "country_name": "Montenegro",
+    "iso_alpha2": "ME",
+    "carbon_intensity": 417.073,
+    "year": 2023
+  },
+  "MNG": {
+    "country_name": "Mongolia",
+    "iso_alpha2": "MN",
+    "carbon_intensity": 775.309,
+    "year": 2023
+  },
+  "MOZ": {
+    "country_name": "Mozambique",
+    "iso_alpha2": "MZ",
+    "carbon_intensity": 135.647,
+    "year": 2022
+  },
+  "MRT": {
+    "country_name": "Mauritania",
+    "iso_alpha2": "MR",
+    "carbon_intensity": 464.706,
+    "year": 2022
+  },
+  "MSR": {
+    "country_name": "Montserrat",
+    "iso_alpha2": "MS",
+    "carbon_intensity": 1000.0,
+    "year": 2022
+  },
+  "MTQ": {
+    "country_name": "Martinique",
+    "iso_alpha2": "MQ",
+    "carbon_intensity": 523.179,
+    "year": 2021
+  },
+  "MUS": {
+    "country_name": "Mauritius",
+    "iso_alpha2": "MU",
+    "carbon_intensity": 632.479,
+    "year": 2022
+  },
+  "MWI": {
+    "country_name": "Malawi",
+    "iso_alpha2": "MW",
+    "carbon_intensity": 66.667,
+    "year": 2022
+  },
+  "MYS": {
+    "country_name": "Malaysia",
+    "iso_alpha2": "MY",
+    "carbon_intensity": 605.831,
+    "year": 2022
+  },
+  "NAM": {
+    "country_name": "Namibia",
+    "iso_alpha2": "NA",
+    "carbon_intensity": 59.259,
+    "year": 2022
+  },
+  "NCL": {
+    "country_name": "New Caledonia",
+    "iso_alpha2": "NC",
+    "carbon_intensity": 660.584,
+    "year": 2022
+  },
+  "NER": {
+    "country_name": "Niger",
+    "iso_alpha2": "NE",
+    "carbon_intensity": 670.886,
+    "year": 2022
+  },
+  "NGA": {
+    "country_name": "Nigeria",
+    "iso_alpha2": "NG",
+    "carbon_intensity": 523.247,
+    "year": 2023
+  },
+  "NIC": {
+    "country_name": "Nicaragua",
+    "iso_alpha2": "NI",
+    "carbon_intensity": 265.116,
+    "year": 2022
+  },
+  "NLD": {
+    "country_name": "Netherlands",
+    "iso_alpha2": "NL",
+    "carbon_intensity": 267.622,
+    "year": 2023
+  },
+  "NOR": {
+    "country_name": "Norway",
+    "iso_alpha2": "NO",
+    "carbon_intensity": 30.08,
+    "year": 2023
+  },
+  "NPL": {
+    "country_name": "Nepal",
+    "iso_alpha2": "NP",
+    "carbon_intensity": 24.44,
+    "year": 2022
+  },
+  "NRU": {
+    "country_name": "Nauru",
+    "iso_alpha2": "NR",
+    "carbon_intensity": 750.0,
+    "year": 2022
+  },
+  "NZL": {
+    "country_name": "New Zealand",
+    "iso_alpha2": "NZ",
+    "carbon_intensity": 112.758,
+    "year": 2023
+  },
+  "OMN": {
+    "country_name": "Oman",
+    "iso_alpha2": "OM",
+    "carbon_intensity": 564.635,
+    "year": 2023
+  },
+  "PAK": {
+    "country_name": "Pakistan",
+    "iso_alpha2": "PK",
+    "carbon_intensity": 440.608,
+    "year": 2023
+  },
+  "PAN": {
+    "country_name": "Panama",
+    "iso_alpha2": "PA",
+    "carbon_intensity": 161.677,
+    "year": 2022
+  },
+  "PER": {
+    "country_name": "Peru",
+    "iso_alpha2": "PE",
+    "carbon_intensity": 266.478,
+    "year": 2023
+  },
+  "PHL": {
+    "country_name": "Philippines",
+    "iso_alpha2": "PH",
+    "carbon_intensity": 610.688,
+    "year": 2023
+  },
+  "PNG": {
+    "country_name": "Papua New Guinea",
+    "iso_alpha2": "PG",
+    "carbon_intensity": 507.246,
+    "year": 2022
+  },
+  "POL": {
+    "country_name": "Poland",
+    "iso_alpha2": "PL",
+    "carbon_intensity": 661.926,
+    "year": 2023
+  },
+  "PRI": {
+    "country_name": "Puerto Rico",
+    "iso_alpha2": "PR",
+    "carbon_intensity": 678.738,
+    "year": 2022
+  },
+  "PRK": {
+    "country_name": "North Korea",
+    "iso_alpha2": "KP",
+    "carbon_intensity": 389.587,
+    "year": 2022
+  },
+  "PRT": {
+    "country_name": "Portugal",
+    "iso_alpha2": "PT",
+    "carbon_intensity": 165.553,
+    "year": 2023
+  },
+  "PRY": {
+    "country_name": "Paraguay",
+    "iso_alpha2": "PY",
+    "carbon_intensity": 23.755,
+    "year": 2023
+  },
+  "PSE": {
+    "country_name": "Palestine",
+    "iso_alpha2": "PS",
+    "carbon_intensity": 516.129,
+    "year": 2022
+  },
+  "PYF": {
+    "country_name": "French Polynesia",
+    "iso_alpha2": "PF",
+    "carbon_intensity": 442.857,
+    "year": 2022
+  },
+  "QAT": {
+    "country_name": "Qatar",
+    "iso_alpha2": "QA",
+    "carbon_intensity": 602.5,
+    "year": 2023
+  },
+  "REU": {
+    "country_name": "Reunion",
+    "iso_alpha2": "RE",
+    "carbon_intensity": 572.816,
+    "year": 2021
+  },
+  "ROU": {
+    "country_name": "Romania",
+    "iso_alpha2": "RO",
+    "carbon_intensity": 240.583,
+    "year": 2023
+  },
+  "RUS": {
+    "country_name": "Russia",
+    "iso_alpha2": "RU",
+    "carbon_intensity": 441.039,
+    "year": 2023
+  },
+  "RWA": {
+    "country_name": "Rwanda",
+    "iso_alpha2": "RW",
+    "carbon_intensity": 316.327,
+    "year": 2022
+  },
+  "SAU": {
+    "country_name": "Saudi Arabia",
+    "iso_alpha2": "SA",
+    "carbon_intensity": 706.791,
+    "year": 2022
+  },
+  "SDN": {
+    "country_name": "Sudan",
+    "iso_alpha2": "SD",
+    "carbon_intensity": 263.158,
+    "year": 2022
+  },
+  "SEN": {
+    "country_name": "Senegal",
+    "iso_alpha2": "SN",
+    "carbon_intensity": 511.598,
+    "year": 2022
+  },
+  "SGP": {
+    "country_name": "Singapore",
+    "iso_alpha2": "SG",
+    "carbon_intensity": 470.783,
+    "year": 2023
+  },
+  "SHN": {
+    "country_name": "Saint Helena",
+    "iso_alpha2": "SH",
+    "carbon_intensity": 1000.0,
+    "year": 2022
+  },
+  "SLB": {
+    "country_name": "Solomon Islands",
+    "iso_alpha2": "SB",
+    "carbon_intensity": 700.0,
+    "year": 2022
+  },
+  "SLE": {
+    "country_name": "Sierra Leone",
+    "iso_alpha2": "SL",
+    "carbon_intensity": 50.0,
+    "year": 2022
+  },
+  "SLV": {
+    "country_name": "El Salvador",
+    "iso_alpha2": "SV",
+    "carbon_intensity": 271.468,
+    "year": 2023
+  },
+  "SOM": {
+    "country_name": "Somalia",
+    "iso_alpha2": "SO",
+    "carbon_intensity": 578.947,
+    "year": 2022
+  },
+  "SPM": {
+    "country_name": "Saint Pierre and Miquelon",
+    "iso_alpha2": "PM",
+    "carbon_intensity": 600.0,
+    "year": 2022
+  },
+  "SRB": {
+    "country_name": "Serbia",
+    "iso_alpha2": "RS",
+    "carbon_intensity": 636.062,
+    "year": 2023
+  },
+  "SSD": {
+    "country_name": "South Sudan",
+    "iso_alpha2": "SS",
+    "carbon_intensity": 629.032,
+    "year": 2022
+  },
+  "STP": {
+    "country_name": "Sao Tome and Principe",
+    "iso_alpha2": "ST",
+    "carbon_intensity": 642.857,
+    "year": 2022
+  },
+  "SUR": {
+    "country_name": "Suriname",
+    "iso_alpha2": "SR",
+    "carbon_intensity": 349.282,
+    "year": 2022
+  },
+  "SVK": {
+    "country_name": "Slovakia",
+    "iso_alpha2": "SK",
+    "carbon_intensity": 116.774,
+    "year": 2023
+  },
+  "SVN": {
+    "country_name": "Slovenia",
+    "iso_alpha2": "SI",
+    "carbon_intensity": 231.275,
+    "year": 2023
+  },
+  "SWE": {
+    "country_name": "Sweden",
+    "iso_alpha2": "SE",
+    "carbon_intensity": 40.695,
+    "year": 2023
+  },
+  "SWZ": {
+    "country_name": "Eswatini",
+    "iso_alpha2": "SZ",
+    "carbon_intensity": 172.414,
+    "year": 2022
+  },
+  "SYC": {
+    "country_name": "Seychelles",
+    "iso_alpha2": "SC",
+    "carbon_intensity": 564.516,
+    "year": 2022
+  },
+  "SYR": {
+    "country_name": "Syria",
+    "iso_alpha2": "SY",
+    "carbon_intensity": 701.661,
+    "year": 2022
+  },
+  "TCA": {
+    "country_name": "Turks and Caicos Islands",
+    "iso_alpha2": "TC",
+    "carbon_intensity": 653.846,
+    "year": 2022
+  },
+  "TCD": {
+    "country_name": "Chad",
+    "iso_alpha2": "TD",
+    "carbon_intensity": 628.571,
+    "year": 2022
+  },
+  "TGO": {
+    "country_name": "Togo",
+    "iso_alpha2": "TG",
+    "carbon_intensity": 443.182,
+    "year": 2022
+  },
+  "THA": {
+    "country_name": "Thailand",
+    "iso_alpha2": "TH",
+    "carbon_intensity": 549.583,
+    "year": 2023
+  },
+  "TJK": {
+    "country_name": "Tajikistan",
+    "iso_alpha2": "TJ",
+    "carbon_intensity": 116.858,
+    "year": 2022
+  },
+  "TKM": {
+    "country_name": "Turkmenistan",
+    "iso_alpha2": "TM",
+    "carbon_intensity": 1306.025,
+    "year": 2022
+  },
+  "TLS": {
+    "country_name": "East Timor",
+    "iso_alpha2": "TL",
+    "carbon_intensity": 666.667,
+    "year": 2022
+  },
+  "TON": {
+    "country_name": "Tonga",
+    "iso_alpha2": "TO",
+    "carbon_intensity": 625.0,
+    "year": 2022
+  },
+  "TTO": {
+    "country_name": "Trinidad and Tobago",
+    "iso_alpha2": "TT",
+    "carbon_intensity": 681.529,
+    "year": 2022
+  },
+  "TUN": {
+    "country_name": "Tunisia",
+    "iso_alpha2": "TN",
+    "carbon_intensity": 563.956,
+    "year": 2023
+  },
+  "TUR": {
+    "country_name": "Turkey",
+    "iso_alpha2": "TR",
+    "carbon_intensity": 464.586,
+    "year": 2023
+  },
+  "TWN": {
+    "country_name": "Taiwan",
+    "iso_alpha2": "TW",
+    "carbon_intensity": 642.378,
+    "year": 2023
+  },
+  "TZA": {
+    "country_name": "Tanzania",
+    "iso_alpha2": "TZ",
+    "carbon_intensity": 339.246,
+    "year": 2022
+  },
+  "UGA": {
+    "country_name": "Uganda",
+    "iso_alpha2": "UG",
+    "carbon_intensity": 44.527,
+    "year": 2022
+  },
+  "UKR": {
+    "country_name": "Ukraine",
+    "iso_alpha2": "UA",
+    "carbon_intensity": 259.693,
+    "year": 2022
+  },
+  "URY": {
+    "country_name": "Uruguay",
+    "iso_alpha2": "UY",
+    "carbon_intensity": 128.788,
+    "year": 2023
+  },
+  "USA": {
+    "country_name": "United States",
+    "iso_alpha2": "US",
+    "carbon_intensity": 369.473,
+    "year": 2023
+  },
+  "UZB": {
+    "country_name": "Uzbekistan",
+    "iso_alpha2": "UZ",
+    "carbon_intensity": 1167.603,
+    "year": 2022
+  },
+  "VCT": {
+    "country_name": "Saint Vincent and the Grenadines",
+    "iso_alpha2": "VC",
+    "carbon_intensity": 529.412,
+    "year": 2022
+  },
+  "VEN": {
+    "country_name": "Venezuela",
+    "iso_alpha2": "VE",
+    "carbon_intensity": 185.802,
+    "year": 2022
+  },
+  "VGB": {
+    "country_name": "British Virgin Islands",
+    "iso_alpha2": "VG",
+    "carbon_intensity": 647.059,
+    "year": 2022
+  },
+  "VIR": {
+    "country_name": "United States Virgin Islands",
+    "iso_alpha2": "VI",
+    "carbon_intensity": 632.353,
+    "year": 2022
+  },
+  "VNM": {
+    "country_name": "Vietnam",
+    "iso_alpha2": "VN",
+    "carbon_intensity": 475.449,
+    "year": 2023
+  },
+  "VUT": {
+    "country_name": "Vanuatu",
+    "iso_alpha2": "VU",
+    "carbon_intensity": 571.429,
+    "year": 2022
+  },
+  "WSM": {
+    "country_name": "Samoa",
+    "iso_alpha2": "WS",
+    "carbon_intensity": 473.684,
+    "year": 2022
+  },
+  "YEM": {
+    "country_name": "Yemen",
+    "iso_alpha2": "YE",
+    "carbon_intensity": 566.102,
+    "year": 2022
+  },
+  "ZAF": {
+    "country_name": "South Africa",
+    "iso_alpha2": "ZA",
+    "carbon_intensity": 707.686,
+    "year": 2023
+  },
+  "ZMB": {
+    "country_name": "Zambia",
+    "iso_alpha2": "ZM",
+    "carbon_intensity": 111.967,
+    "year": 2022
+  },
+  "ZWE": {
+    "country_name": "Zimbabwe",
+    "iso_alpha2": "ZW",
+    "carbon_intensity": 297.872,
+    "year": 2022
+  }
+}

@@ -18,9 +18,16 @@ In short (the legal code below is what applies):
 
 Material NOT covered by this license (kept under its own terms):
   - data/instances/ and the coordinates derived from them in
-    data/instances.js: TSPLIB95 problem instances (G. Reinelt, Universitaet
+    data/reference.js: TSPLIB95 problem instances (G. Reinelt, Universitaet
     Heidelberg), http://comopt.ifi.uni-heidelberg.de/software/TSPLIB95/
-  - D3.js, loaded at runtime from a CDN, under its own ISC license.
+  - data/global_energy_mix.json: carbon intensity per country, from the
+    CodeCarbon project (MIT license).
+  - D3.js (ISC license) and flag-icons (MIT license), loaded at runtime from
+    a CDN.
+  - js/icons.js: icons from Lucide v0.460.0, https://lucide.dev (ISC license;
+    the copyright and permission notice are kept in the file).
+  - data/world.js: country shapes from Natural Earth admin-0 countries,
+    https://www.naturalearthdata.com/ (public domain).
 
 -----------------------------------------------------------------------
 

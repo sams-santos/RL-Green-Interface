@@ -40,25 +40,19 @@ window.GreenRL = (() => {
       cumulative[key] = out;
     });
 
-    // minIdx[key][i] = index of the lowest value among episodes 0..i (first occurrence).
-    const minIdx = {};
-    METRICS.forEach(key => {
-      const values = cols[key];
-      const out = new Int32Array(n);
-      let best = -1;
-      for (let i = 0; i < n; i++) {
-        if (!Number.isNaN(values[i]) && (best < 0 || values[i] < values[best])) best = i;
-        out[i] = best;
-      }
-      minIdx[key] = out;
-    });
-
+    // bestIdx[i] = index of the shortest tour among episodes 0..i (first occurrence).
+    const bestIdx = new Int32Array(n);
     const bestSoFar = new Float64Array(n);
     const improvements = [];
+    let best = -1;
     for (let i = 0; i < n; i++) {
-      const b = minIdx.distance[i];
-      bestSoFar[i] = b < 0 ? NaN : cols.distance[b];
-      if (b === i) improvements.push(i);
+      const d = cols.distance[i];
+      if (!Number.isNaN(d) && (best < 0 || d < cols.distance[best])) {
+        best = i;
+        improvements.push(i);
+      }
+      bestIdx[i] = best;
+      bestSoFar[i] = best < 0 ? NaN : cols.distance[best];
     }
 
     const pathIndex = decode(raw.pathIndex, n);
@@ -71,8 +65,15 @@ window.GreenRL = (() => {
     }
 
     return {
-      id: raw.id, config: raw.config, demo: !!raw.demo, units: raw.units, n,
-      cols, cumulative, minIdx, bestSoFar, improvements, path
+      id: raw.id, config: raw.config, n,
+      // Number shown for the first episode (the source files may count from 0 or 1).
+      firstEpisode: raw.firstEpisode ?? 1,
+      // g CO2eq/kWh used when the emissions column was measured.
+      carbonIntensity: raw.carbonIntensity ?? null,
+      // How energy was measured, e.g. { cpu_measurement: 'RAPL', tracking_mode: 'machine' }.
+      measurement: raw.measurement || {},
+      hasPaths: (raw.paths || []).length > 0,
+      cols, cumulative, bestIdx, bestSoFar, improvements, path
     };
   }
 
@@ -111,5 +112,5 @@ window.GreenRL = (() => {
     return entry.promise;
   }
 
-  return { registerRun, loadRun, METRICS };
+  return { registerRun, loadRun };
 })();

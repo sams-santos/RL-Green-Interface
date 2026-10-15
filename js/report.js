@@ -1,24 +1,13 @@
-// Builds a self-contained HTML report of the selected run (episodes 1..current) with the
-// sections the user ticked. Charts are re-rendered off-screen in the light theme so the
-// report prints well whatever theme the page is in.
+// Builds a self-contained HTML report of the selected run (first episode up to the current
+// one) with the sections the user ticked. Charts are re-rendered off-screen at print size.
 window.GreenRLReport = (() => {
   const { formatValue } = GreenRLCharts;
   const fmtInt = d3.format(',');
   const MAX_IMPROVEMENT_ROWS = 200;
 
+  const icon = name => GreenRLIcons.svg(name);
+  const flagImg = code => `<img class="flag" alt="" src="${GreenRLCharts.flagUrl(code)}">`;
   const esc = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-  function withLightTheme(fn) {
-    const root = document.documentElement;
-    const previous = root.getAttribute('data-theme');
-    root.setAttribute('data-theme', 'light');
-    try {
-      return fn();
-    } finally {
-      if (previous === null) root.removeAttribute('data-theme');
-      else root.setAttribute('data-theme', previous);
-    }
-  }
 
   function renderSvg(draw, opts, width, height) {
     const holder = document.createElement('div');
@@ -68,88 +57,137 @@ window.GreenRLReport = (() => {
   }
 
   function build(ctx) {
-    const { run, episode, sections, instance, specs, params, displayValue, units, durationText, gapText } = ctx;
+    const { run, episode, sections, instance, specs, params, displayValue, units, durationText, gapText,
+      basis, gridText, epLabel } = ctx;
     const i = episode - 1;
     const config = run.config;
     const algorithm = displayValue(params[0], config.algorithm);
     const energy = v => `${formatValue(v * units.energyFactor)} ${units.energy}`;
     const emissions = v => `${formatValue(v * units.emissionsFactor)} ${units.emissions} CO₂eq`;
     const seconds = v => `${formatValue(v)} s`;
-    const at = idx => (idx >= 0 ? `ep ${fmtInt(idx + 1)}` : '—');
-    const bestIdx = run.minIdx.distance[i];
+    const at = idx => (idx >= 0 ? `ep ${epLabel(idx)}` : '—');
+    const range = `${epLabel(0)}–${epLabel(i)}`;
+    const bestIdx = run.bestIdx[i];
     const parts = [];
 
     // Configuration (always included)
-    parts.push(`<section><h2>Configuration</h2>${kv([
+    parts.push(`<section><h2>${icon('sliders-horizontal')}Configuration</h2>${kv([
       ...params.map(p => [p.label, displayValue(p, config[p.key])]),
       ['Instance type', instance ? `${instance.type}, ${fmtInt(instance.dimension)} nodes` : '—'],
-      ['Episodes covered', `1 – ${fmtInt(episode)} of ${fmtInt(run.n)}`],
+      ['Episodes covered', `${range} (${fmtInt(episode)} of ${fmtInt(run.n)})`],
+      ['Electricity grid', gridText],
+      ['Energy measurement', [run.measurement.cpu_measurement && `CPU energy from ${run.measurement.cpu_measurement}`,
+        run.measurement.tracking_mode && `tracking mode: ${run.measurement.tracking_mode}`].filter(Boolean).join(' · ') || '—'],
       ['Run id', run.id]
     ])}</section>`);
 
     if (sections.has('energySummary')) {
       const rows = [
-        ['Duration', run.cols.duration, durationText, seconds],
-        ['CPU energy', run.cols.cpu_energy, energy, energy],
-        ['RAM energy', run.cols.ram_energy, energy, energy],
-        ['Total energy', run.cols.energy_consumed, energy, energy],
-        ['Emissions', run.cols.emissions, emissions, emissions]
-      ].map(([label, values, totalFmt, epFmt]) => {
+        ['Duration', run.cols.duration, 1, durationText, seconds],
+        ['CPU energy', run.cols.cpu_energy, 1, energy, energy],
+        ['RAM energy', run.cols.ram_energy, 1, energy, energy],
+        ['Total energy', run.cols.energy_consumed, 1, energy, energy],
+        [`Emissions (${basis.label})`, basis.perEpisode, basis.factor, emissions, emissions]
+      ].map(([label, values, factor, totalFmt, epFmt]) => {
         const s = columnStats(values, episode);
         const all = columnStats(values, run.n);
-        return [label, totalFmt(s.sum), epFmt(s.mean),
-          s.min >= 0 ? `${epFmt(values[s.min])} (${at(s.min)})` : '—',
-          s.max >= 0 ? `${epFmt(values[s.max])} (${at(s.max)})` : '—',
-          totalFmt(all.sum)];
+        return [label, totalFmt(s.sum * factor), epFmt(s.mean * factor),
+          s.min >= 0 ? `${epFmt(values[s.min] * factor)} (${at(s.min)})` : '—',
+          s.max >= 0 ? `${epFmt(values[s.max] * factor)} (${at(s.max)})` : '—',
+          totalFmt(all.sum * factor)];
       });
-      parts.push(`<section><h2>Energy &amp; emissions</h2>${table(
-        ['Metric', `Total, ep 1–${fmtInt(episode)}`, 'Mean per episode', 'Lowest episode', 'Highest episode', `Total, all ${fmtInt(run.n)}`],
+      const c = run.cumulative;
+      const flow = `<p class="flow">${icon('cpu')}CPU ${esc(energy(c.cpu_energy[i]))} + ${icon('memory-stick')}RAM ${esc(energy(c.ram_energy[i]))}` +
+        ` = ${icon('zap')}<strong>E ${esc(energy(c.energy_consumed[i]))}</strong> × ${icon('factory')}${esc(gridText)}` +
+        ` = ${icon('cloud')}<strong>${esc(emissions(basis.cumulative[i] * basis.factor))}</strong></p>`;
+      parts.push(`<section><h2>${icon('zap')}Energy &amp; emissions</h2>${flow}${table(
+        ['Metric', `Total, ep ${range}`, 'Mean per episode', 'Lowest episode', 'Highest episode', `Total, all ${fmtInt(run.n)}`],
         rows, 'numeric')}</section>`);
     }
 
-    const svgs = withLightTheme(() => ({
+    const svgs = {
       energy: sections.has('energyCharts') ? renderSvg(GreenRLCharts.timeSeries, specs.energy.opts, 860, 260) : '',
       emissions: sections.has('energyCharts') ? renderSvg(GreenRLCharts.timeSeries, specs.emissions.opts, 420, 220) : '',
       duration: sections.has('energyCharts') ? renderSvg(GreenRLCharts.timeSeries, specs.duration.opts, 420, 220) : '',
+      country: sections.has('countries') ? renderSvg(GreenRLCharts.countryMap, specs.country.opts, 860, 440) : '',
       distance: sections.has('distanceChart') ? renderSvg(GreenRLCharts.timeSeries, specs.distance.opts, 860, 320) : '',
       route: sections.has('bestPath') && bestIdx >= 0 ? renderSvg(GreenRLCharts.routeChart, {
         instance, current: run.path(bestIdx), currentColor: '--series-2', showBest: false
       }, 560, 400) : '',
       energyLegend: legendHtml(specs.energy.legend),
       distanceLegend: legendHtml(specs.distance.legend)
-    }));
+    };
 
     if (sections.has('energyCharts')) {
-      parts.push(`<section><h2>Energy charts</h2>
+      parts.push(`<section><h2>${icon('chart-line')}Energy charts</h2>
         ${figure(specs.energy.title, specs.energy.caption, svgs.energyLegend, svgs.energy)}
-        <div class="two-up">${figure(specs.emissions.title, '', '', svgs.emissions)}${figure(specs.duration.title, '', '', svgs.duration)}</div>
+        <div class="two-up">${figure(specs.emissions.title, specs.emissions.caption, '', svgs.emissions)}${figure(specs.duration.title, '', '', svgs.duration)}</div>
+      </section>`);
+    }
+
+    if (sections.has('countries')) {
+      const ranked = [...specs.country.opts.countries].sort((a, b) => a.value - b.value);
+      const unit = specs.country.opts.unit;
+      const row = (title, c) => [title, c ? c.name : '—', c ? formatValue(c.intensity) : '—', c ? `${formatValue(c.value)} ${unit}` : '—'];
+      const selected = ranked.find(c => c.iso === specs.country.opts.selected);
+      const rows = [
+        ...(selected ? [row('Selected', selected)] : []),
+        row('Lowest', ranked[0]),
+        row('Median', ranked[Math.floor(ranked.length / 2)]),
+        row('Highest', ranked[ranked.length - 1])
+      ];
+      const lo = ranked[0], hi = ranked[ranked.length - 1];
+      parts.push(`<section><h2>${icon('globe')}Emissions by country</h2>
+        ${figure('Emissions of this run in every country', specs.country.caption.replace(/ Click a country.*$/, ''), '', svgs.country)}
+        ${table(['', 'Country', 'C (g CO₂eq/kWh)', `Emissions, ep ${range}`], rows, 'numeric')}
+        <p>${esc(d3.format(',.0f')(hi.value / lo.value))}× more CO₂eq in ${esc(hi.name)} than in ${esc(lo.name)}, for the same run.</p>
+      </section>`);
+    }
+
+    if (sections.has('everyday')) {
+      const ev = specs.everyday;
+      const Eq = GreenRLEquivalents;
+      const cards = ev.groups.map(g => `<h3>${g.flag ? flagImg(g.flag) : ''}${esc(g.title)}</h3><div class="eq-grid">${g.items.map(it =>
+        `<div class="eq-card ${g.basis}">${Eq.iconHtml(it.eq, g.basis)}<div><strong>${esc(it.value)}</strong>` +
+        `<span>${esc(it.label)} [${it.source}]</span></div></div>`).join('')}</div>`).join('');
+      const projection = `<table class="numeric eq-table"><thead><tr><th></th>${ev.columns.map(c =>
+        `<th>${icon(c.icon)}${esc(c.label)} <span class="times">${esc(c.times)}</span></th>`).join('')}</tr></thead><tbody>` +
+        ev.rows.map(r => `<tr><td>${Eq.iconHtml(r.eq)}${esc(r.label)}${r.source ? ` [${r.source}]` : ''}</td>` +
+          r.cells.map(c => `<td>${esc(c)}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+      parts.push(`<section><h2>${icon('lightbulb')}In everyday terms</h2>
+        <p>${esc(ev.scope)}</p>
+        ${cards}
+        <h3>${icon('calendar-range')}If you ran this every day</h3>
+        ${projection}
+        <ol class="sources">${ev.sources.map(s =>
+          `<li><a href="${esc(s.url)}">${esc(s.name)}</a> (retrieved ${esc(ev.retrieved)})</li>`).join('')}</ol>
       </section>`);
     }
 
     if (sections.has('performanceSummary')) {
       const c = run.cumulative;
       const dist = columnStats(run.cols.distance, episode);
-      parts.push(`<section><h2>Performance</h2>${kv([
+      parts.push(`<section><h2>${icon('trophy')}Performance</h2>${kv([
         ['Best distance', formatValue(run.bestSoFar[i])],
         ['Found at', at(bestIdx)],
         ['Gap to optimum', instance?.optimum ? `${gapText(run.bestSoFar[i])} (optimum ${fmtInt(instance.optimum)})` : '—'],
-        [`Distance at episode ${fmtInt(episode)}`, formatValue(run.cols.distance[i])],
+        [`Distance at episode ${epLabel(i)}`, formatValue(run.cols.distance[i])],
         ['Mean distance', formatValue(dist.mean)],
         ['Episodes that set a new best', fmtInt(d3.bisectRight(run.improvements, i))],
         ['Time until best was found', bestIdx >= 0 ? durationText(c.duration[bestIdx]) : '—'],
         ['Energy until best was found', bestIdx >= 0 ? energy(c.energy_consumed[bestIdx]) : '—'],
-        ['Emissions until best was found', bestIdx >= 0 ? emissions(c.emissions[bestIdx]) : '—']
+        [`Emissions until best was found (${basis.label})`, bestIdx >= 0 ? emissions(basis.cumulative[bestIdx] * basis.factor) : '—']
       ])}</section>`);
     }
 
     if (sections.has('distanceChart')) {
-      parts.push(`<section><h2>Distance</h2>${figure('Distance per episode', specs.distance.caption, svgs.distanceLegend, svgs.distance)}</section>`);
+      parts.push(`<section><h2>${icon('route')}Distance</h2>${figure('Distance per episode', specs.distance.caption, svgs.distanceLegend, svgs.distance)}</section>`);
     }
 
     if (sections.has('bestPath')) {
       const path = bestIdx >= 0 ? run.path(bestIdx) : null;
-      parts.push(`<section><h2>Best path</h2>
-        ${path ? `<p>Episode ${fmtInt(bestIdx + 1)} · distance ${esc(formatValue(run.bestSoFar[i]))} · ${esc(specs.routeCaption)}</p>
+      parts.push(`<section><h2>${icon('map')}Best path</h2>
+        ${path ? `<p>Episode ${epLabel(bestIdx)} · distance ${esc(formatValue(run.bestSoFar[i]))} · ${esc(specs.routeCaption)}</p>
         <div class="route">${svgs.route}</div>
         <p class="path">${path.map(n => esc(n)).join(' → ')} → ${esc(path[0])}</p>` : '<p>No path recorded for this run.</p>'}
       </section>`);
@@ -158,9 +196,9 @@ window.GreenRLReport = (() => {
     if (sections.has('improvements')) {
       const list = run.improvements.slice(0, d3.bisectRight(run.improvements, i));
       const shown = list.slice(-MAX_IMPROVEMENT_ROWS);
-      const rows = shown.map(k => [fmtInt(k + 1), formatValue(run.cols.distance[k]), gapText(run.cols.distance[k]),
+      const rows = shown.map(k => [epLabel(k), formatValue(run.cols.distance[k]), gapText(run.cols.distance[k]),
         durationText(run.cumulative.duration[k]), energy(run.cumulative.energy_consumed[k])]);
-      parts.push(`<section><h2>History of new best distances</h2>
+      parts.push(`<section><h2>${icon('trending-down')}History of new best distances</h2>
         ${list.length > shown.length ? `<p>Showing the last ${fmtInt(shown.length)} of ${fmtInt(list.length)} improvements.</p>` : ''}
         ${table(['Episode', 'Distance', 'Gap to optimum', 'Elapsed time', 'Energy used so far'], rows, 'numeric')}
       </section>`);
@@ -174,10 +212,9 @@ window.GreenRLReport = (() => {
 <body><main>
 <header>
   <div class="eyebrow">Green RL Playground · experiment report</div>
-  <h1>${esc(algorithm)} on ${esc(config.instance)}</h1>
-  <p>Episodes 1–${fmtInt(episode)} of ${fmtInt(run.n)} · ${ctx.mode === 'cumulative' ? 'cumulative' : 'per-episode'} charts · generated ${esc(generated)}</p>
+  <h1>${esc(algorithm)} on ${esc(config.instance)} · seed ${esc(config.seed)}</h1>
+  <p>Episodes ${range} (${fmtInt(episode)} of ${fmtInt(run.n)}) · ${ctx.mode === 'cumulative' ? 'cumulative' : 'per-episode'} charts · emissions for ${basis.flag ? flagImg(basis.flag) : ''}${esc(basis.label)} · generated ${esc(generated)}</p>
 </header>
-${run.demo ? '<div class="warning"><strong>Synthetic demo data.</strong> These numbers illustrate the interface and are not experiment results.</div>' : ''}
 ${parts.join('\n')}
 <footer>Generated by Green RL Playground from pre-computed results.</footer>
 </main></body></html>`;
@@ -209,41 +246,64 @@ ${parts.join('\n')}
   const REPORT_CSS = `
     :root { --text:#1d3a30; --muted:#5c7268; --line:#dcebe3; --grid:#edf3ef; --axis:#c9d8d0; --soft:#e6f6ee; --panel:#ffffff; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #f3f9f6; color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif; font-size: 13px; }
+    body { margin: 0; background: #f3f9f6; color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif; font-size: 14.5px; }
     main { max-width: 920px; margin: 0 auto; padding: 28px 30px 40px; background: var(--panel); }
-    header { padding: 22px 24px; border-radius: 14px; background: linear-gradient(120deg, #cfeedd 0%, #d8ecfb 60%, #fde6d2 100%); margin-bottom: 18px; }
-    .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
-    h1 { margin: 6px 0 4px; font-size: 24px; }
+    header { padding: 22px 24px; border-radius: 14px; background: #e1f4ea; margin-bottom: 18px; }
+    .flag { width: 18px; height: 13.5px; vertical-align: -2px; margin-right: 5px; border-radius: 2px; }
+    .eyebrow { font-size: 12.5px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+    h1 { margin: 6px 0 4px; font-size: 26px; }
     header p { margin: 0; color: var(--muted); }
-    h2 { font-size: 16px; margin: 26px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--soft); }
+    h2 { font-size: 18px; margin: 26px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--soft); }
     section { break-inside: avoid-page; }
     p { line-height: 1.5; color: var(--muted); }
-    .warning { background: #fff6dc; border: 1px solid #f2dc9b; border-radius: 10px; padding: 10px 12px; }
     table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
     th, td { padding: 7px 8px; border-bottom: 1px solid var(--grid); text-align: left; vertical-align: top; }
-    thead th { color: var(--muted); font-weight: 650; font-size: 11.5px; }
+    thead th { color: var(--muted); font-weight: 650; font-size: 13px; }
     table.numeric td:not(:first-child), table.numeric th:not(:first-child) { text-align: right; }
     table.kv th { width: 38%; color: var(--muted); font-weight: 500; }
     table.kv td { font-weight: 600; }
     figure { margin: 0 0 16px; break-inside: avoid; }
-    figcaption strong { display: block; font-size: 13.5px; }
-    figcaption span { display: block; color: var(--muted); font-size: 12px; margin: 2px 0 4px; }
+    figcaption strong { display: block; font-size: 15px; }
+    figcaption span { display: block; color: var(--muted); font-size: 13.5px; margin: 2px 0 4px; }
     .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     svg { max-width: 100%; height: auto; display: block; }
     .route { display: flex; justify-content: center; }
-    .path { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--text); word-break: break-word; background: var(--soft); padding: 10px; border-radius: 8px; }
-    .legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin: 2px 0 4px; }
+    .path { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; color: var(--text); word-break: break-word; background: var(--soft); padding: 10px; border-radius: 8px; }
+    .legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 13.5px; margin: 2px 0 4px; }
     .legend span { display: inline-flex; align-items: center; gap: 6px; }
     .key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
-    .axis text { fill: var(--muted); font-size: 10.5px; }
+    .axis text { fill: var(--muted); font-size: 12px; }
     .axis path, .axis line { stroke: var(--axis); }
     .grid-line { stroke: var(--grid); }
     .ref-line { stroke: var(--muted); opacity: .7; }
-    .ref-label, .end-label, .route-label, .best-marker text { fill: var(--text); font-size: 11px; font-weight: 600; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+    .ref-label, .end-label, .route-label, .best-marker text { fill: var(--text); font-size: 12.5px; font-weight: 600; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
     .ref-label { fill: var(--muted); font-weight: 500; }
-    footer { margin-top: 30px; color: var(--muted); font-size: 11px; text-align: center; }
+    .axis-line { stroke: var(--axis); }
+    .axis-note { fill: var(--muted); font-size: 12px; }
+    .crosshair { stroke: var(--muted); }
+    h3 { font-size: 15.5px; margin: 18px 0 8px; }
+    .sources { font-size: 13px; color: var(--muted); padding-left: 20px; line-height: 1.6; }
+    .sources a { color: var(--text); }
+    svg.icon { display: inline-block; width: 1.25em; height: 1.25em; max-width: none; vertical-align: -0.17em; margin-right: 6px; color: #3d7a5f; flex: none; }
+    .flow { color: var(--text); background: var(--soft); padding: 10px 12px; border-radius: 10px; line-height: 1.9; }
+    .flow svg.icon { margin: 0 3px 0 0; }
+    .legend-title { fill: var(--text); font-size: 13px; font-weight: 600; }
+    .faint { opacity: .75; }
+    .eq-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
+    .eq-card { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; break-inside: avoid; }
+    .eq-card strong { display: block; font-size: 15.5px; }
+    .eq-card span { color: var(--muted); font-size: 13px; }
+    .eq-icon { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #e6f6ee; color: #2f6b52; margin-right: 8px; vertical-align: middle; }
+    .eq-card .eq-icon { margin-right: 0; }
+    .eq-icon.emissions { background: #e6f0fb; color: #2f5d8a; }
+    .eq-icon svg.icon { margin: 0; width: 20px; height: 20px; color: inherit; }
+    .eq-badge { position: absolute; right: -4px; bottom: -4px; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; }
+    .eq-badge svg.icon { width: 10px; height: 10px; }
+    .times { color: var(--muted); font-weight: 500; }
+    .eq-table td:first-child { white-space: nowrap; }
+    footer { margin-top: 30px; color: var(--muted); font-size: 12.5px; text-align: center; }
     @page { margin: 14mm; }
-    @media print { body { background: #fff; } main { padding: 0; max-width: none; } header { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    @media print { body { background: #fff; } main { padding: 0; max-width: none; } header, .eq-icon, .flow, .eq-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
   `;
 
   return { build, download, print };

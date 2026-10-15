@@ -1,5 +1,10 @@
+// D3 charts, all flat 2D: time series over episodes, tour map and world emissions map.
+// Colours come from the CSS custom properties in css/style.css.
 window.GreenRLCharts = (() => {
   const token = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  // Flag image (flag-icons, MIT) for an ISO 3166-1 alpha-2 code.
+  const flagUrl = code => (code ? `https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/flags/4x3/${code}.svg` : null);
 
   function formatValue(v) {
     if (v == null || !Number.isFinite(v)) return '—';
@@ -56,11 +61,18 @@ window.GreenRLCharts = (() => {
     return tip;
   }
 
-  function fillTooltip(tip, title, rows) {
+  function fillTooltip(tip, title, rows, flag) {
     tip.replaceChildren();
     const head = document.createElement('div');
     head.className = 'tip-title';
-    head.textContent = title;
+    if (flag) {
+      const img = document.createElement('img');
+      img.className = 'flag';
+      img.alt = '';
+      img.src = flagUrl(flag);
+      head.appendChild(img);
+    }
+    head.append(title);
     tip.appendChild(head);
     rows.forEach(row => {
       const line = document.createElement('div');
@@ -81,8 +93,11 @@ window.GreenRLCharts = (() => {
    * Line chart over episodes 1..end.
    * opts.series: [{ label, color (CSS var), values (Float64Array, 0-based by episode),
    *                 kind: 'band' (mean line + min/max wash) | 'last' (value at bucket end),
-   *                 curve: 'step' | 'linear', unit, endLabel (print the last value next to its dot) }]
+   *                 curve: 'step' | 'linear', unit, endLabel (print the last value next to its dot),
+   *                 scale (extra factor for this series only) }]
    * opts.scale, opts.zeroBased, opts.refLine {value,label}, opts.marker {episode,value,label}
+   * Episodes are passed as positions 1..end; opts.base is the number displayed for position 1
+   * (0 when the source data counts episodes from 0).
    */
   function timeSeries(el, opts) {
     el.querySelectorAll('svg, .chart-tooltip').forEach(node => node.remove());
@@ -90,13 +105,15 @@ window.GreenRLCharts = (() => {
     const height = opts.height || 240;
     const m = { top: 16, right: 20, bottom: 28, left: 64 };
     const end = Math.max(1, opts.end);
+    const shift = (opts.base ?? 1) - 1;  // position -> displayed episode number
     const scale = opts.scale || 1;
     const count = Math.min(end, Math.max(20, Math.floor((width - m.left - m.right) / 2)));
     const surface = token('--panel');
 
-    const sets = opts.series.map(s => ({
-      ...s, colorValue: token(s.color), pts: bucketize(s.values, end, count, scale)
-    }));
+    const sets = opts.series.map(s => {
+      const sc = scale * (s.scale ?? 1);
+      return { ...s, sc, colorValue: token(s.color), pts: bucketize(s.values, end, count, sc) };
+    });
 
     let lo = Infinity, hi = -Infinity;
     sets.forEach(s => s.pts.forEach(p => {
@@ -113,7 +130,7 @@ window.GreenRLCharts = (() => {
     if (opts.zeroBased) lo = Math.min(0, lo);
     const pad = (hi - lo) * 0.06 || Math.abs(hi) * 0.1 || 1;
 
-    const x = d3.scaleLinear().domain([1, Math.max(end, 10)]).range([m.left, width - m.right]);
+    const x = d3.scaleLinear().domain([1 + shift, Math.max(end, 10) + shift]).range([m.left, width - m.right]);
     const y = d3.scaleLinear()
       .domain([opts.zeroBased ? lo : lo - pad, hi + pad]).nice()
       .range([height - m.bottom, m.top]);
@@ -153,10 +170,10 @@ window.GreenRLCharts = (() => {
       if (s.kind === 'band' && bucketed) {
         svg.append('path').datum(s.pts)
           .attr('fill', s.colorValue).attr('opacity', 0.2)
-          .attr('d', d3.area().x(p => x(p.x)).y0(p => y(p.min)).y1(p => y(p.max)));
+          .attr('d', d3.area().x(p => x(p.x + shift)).y0(p => y(p.min)).y1(p => y(p.max)));
       }
       const key = s.kind === 'band' ? 'mean' : 'last';
-      const px = s.kind === 'band' ? (p => x(p.x)) : (p => x(p.xEnd));
+      const px = s.kind === 'band' ? (p => x(p.x + shift)) : (p => x(p.xEnd + shift));
       svg.append('path').datum(s.pts)
         .attr('fill', 'none').attr('stroke', s.colorValue)
         .attr('stroke-width', s.width || 2.25).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round')
@@ -167,19 +184,19 @@ window.GreenRLCharts = (() => {
     // Current-episode end dots (pastel marks sit below 3:1 contrast, so single series also
     // print their value as text).
     sets.forEach(s => {
-      const v = s.values[end - 1] * scale;
+      const v = s.values[end - 1] * s.sc;
       if (!Number.isFinite(v)) return;
-      svg.append('circle').attr('cx', x(end)).attr('cy', y(v)).attr('r', 4)
+      svg.append('circle').attr('cx', x(end + shift)).attr('cy', y(v)).attr('r', 4)
         .attr('fill', s.colorValue).attr('stroke', surface).attr('stroke-width', 2);
       if (s.endLabel) {
         svg.append('text').attr('class', 'end-label')
-          .attr('x', x(end) - 8).attr('y', Math.max(m.top + 10, y(v) - 10)).attr('text-anchor', 'end')
+          .attr('x', x(end + shift) - 8).attr('y', Math.max(m.top + 10, y(v) - 10)).attr('text-anchor', 'end')
           .text(formatValue(v) + (s.unit ? ` ${s.unit}` : ''));
       }
     });
 
     if (opts.marker && Number.isFinite(opts.marker.value)) {
-      const mx = x(opts.marker.episode), my = y(opts.marker.value);
+      const mx = x(opts.marker.episode + shift), my = y(opts.marker.value);
       const g = svg.append('g').attr('class', 'best-marker');
       g.append('circle').attr('cx', mx).attr('cy', my).attr('r', 6)
         .attr('fill', token(opts.marker.color)).attr('stroke', surface).attr('stroke-width', 2);
@@ -198,16 +215,16 @@ window.GreenRLCharts = (() => {
     function show(episode) {
       episode = Math.max(1, Math.min(end, Math.round(episode)));
       el.__hoverEpisode = episode;
-      const cx = x(episode);
+      const cx = x(episode + shift);
       hover.style('display', null);
       hover.select('.crosshair').attr('x1', cx).attr('x2', cx);
       const rows = [];
       sets.forEach((s, k) => {
-        const v = s.values[episode - 1] * scale;
+        const v = s.values[episode - 1] * s.sc;
         dots[k].attr('cx', cx).attr('cy', Number.isFinite(v) ? y(v) : -99);
         rows.push({ label: s.label, color: s.colorValue, value: formatValue(v) + (s.unit ? ` ${s.unit}` : '') });
       });
-      fillTooltip(tip, `Episode ${d3.format(',')(episode)}`, rows);
+      fillTooltip(tip, `Episode ${d3.format(',')(episode + shift)}`, rows);
       tip.hidden = false;
       const tipWidth = tip.offsetWidth;
       tip.style.left = `${cx + 14 + tipWidth > width ? cx - tipWidth - 14 : cx + 14}px`;
@@ -223,7 +240,7 @@ window.GreenRLCharts = (() => {
       .attr('x', m.left).attr('y', m.top)
       .attr('width', width - m.left - m.right).attr('height', height - m.top - m.bottom)
       .attr('tabindex', 0)
-      .on('pointermove', event => show(x.invert(d3.pointer(event)[0])))
+      .on('pointermove', event => show(x.invert(d3.pointer(event)[0]) - shift))
       .on('pointerleave', hide)
       .on('blur', hide)
       .on('focus', () => show(el.__hoverEpisode || end))
@@ -304,5 +321,147 @@ window.GreenRLCharts = (() => {
     }
   }
 
-  return { timeSeries, routeChart, legend, formatValue };
+  // Map colours: one step per 100 g CO2eq/kWh of grid carbon intensity. Lightness falls evenly
+  // from mint (clean grid) to plum (carbon-intensive), so the order also reads without colour vision.
+  const MAP_BINS = [100, 200, 300, 400, 500, 600, 700];
+  const MAP_COLORS = ['#e8f7ec', '#f1f0c0', '#f7dc9c', '#f4c086', '#ee9f84', '#e08392', '#c56c97', '#985a8c'];
+  const NO_DATA = '#d3dbd7';
+  let worldCache = null;
+  let mapCount = 0;
+
+  // Country shapes from data/world.js (Natural Earth), built once.
+  function world() {
+    if (!worldCache) {
+      const src = window.GREEN_RL_WORLD || { shapes: [], points: [] };
+      worldCache = {
+        shapes: src.shapes.map(s => ({ type: 'Feature', id: s.iso, properties: { name: s.name },
+          geometry: { type: 'MultiPolygon', coordinates: s.polygons } })),
+        points: src.points
+      };
+    }
+    return worldCache;
+  }
+
+  /**
+   * World map of the emissions this run would have produced on each country's grid
+   * (value = energy × carbon intensity). Countries too small for the map are drawn as dots.
+   * opts.countries: [{ iso, flag, name, intensity (g/kWh), value }], opts.selected: iso | null,
+   * opts.perIntensity: value per g/kWh (labels the legend in emissions), opts.unit,
+   * opts.onSelect(iso): optional, makes countries clickable.
+   */
+  function countryMap(el, opts) {
+    el.querySelectorAll('svg, .chart-tooltip').forEach(node => node.remove());
+    const width = Math.max(el.clientWidth || 600, 260);
+    const height = opts.height || el.clientHeight || 440;
+    const legendHeight = 64;
+    const { shapes, points } = world();
+    const byIso = new Map(opts.countries.map(c => [c.iso, c]));
+    const color = d3.scaleThreshold().domain(MAP_BINS).range(MAP_COLORS);
+    const unit = opts.unit ? ` ${opts.unit}` : '';
+    const ink = token('--text');
+    const surface = token('--panel');
+    const hatchId = `map-nodata-${++mapCount}`;
+
+    const projection = d3.geoEqualEarth()
+      .fitExtent([[4, 4], [width - 4, height - legendHeight - 6]], { type: 'FeatureCollection', features: shapes });
+    const path = d3.geoPath(projection);
+
+    const svg = d3.select(el).append('svg')
+      .attr('viewBox', `0 0 ${width} ${height}`).attr('width', width).attr('height', height)
+      .attr('role', 'img').attr('aria-label', opts.ariaLabel || 'Emissions by country');
+    const hatch = svg.append('defs').append('pattern').attr('id', hatchId)
+      .attr('width', 5).attr('height', 5).attr('patternUnits', 'userSpaceOnUse').attr('patternTransform', 'rotate(45)');
+    hatch.append('rect').attr('width', 5).attr('height', 5).attr('fill', '#f4f6f5');
+    hatch.append('line').attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', 5).attr('stroke', NO_DATA).attr('stroke-width', 1.5);
+    const fill = iso => (byIso.has(iso) ? color(byIso.get(iso).intensity) : `url(#${hatchId})`);
+
+    const tip = makeTooltip(el);
+    const clickable = typeof opts.onSelect === 'function';
+    function hover(event, iso, name) {
+      const c = byIso.get(iso);
+      fillTooltip(tip, c ? c.name : name, c ? [
+        { label: 'emissions of this run', color: color(c.intensity), value: `${formatValue(c.value)}${unit}` },
+        { label: 'g CO₂eq/kWh (grid)', color: color(c.intensity), value: formatValue(c.intensity) }
+      ] : [{ label: 'no carbon intensity data', color: NO_DATA, value: '—' }], c?.flag);
+      if (c && clickable && iso !== opts.selected) {
+        const hint = document.createElement('div');
+        hint.className = 'tip-hint';
+        hint.textContent = 'Click to use this grid';
+        tip.appendChild(hint);
+      }
+      tip.hidden = false;
+      const [px, py] = d3.pointer(event, el);
+      const tw = tip.offsetWidth, th = tip.offsetHeight;
+      tip.style.left = `${px + 16 + tw > width ? px - tw - 16 : px + 16}px`;
+      tip.style.top = `${Math.max(0, Math.min(height - legendHeight - th, py - th / 2))}px`;
+    }
+    const leave = () => { tip.hidden = true; };
+    const pick = iso => { if (clickable && byIso.has(iso) && iso !== opts.selected) opts.onSelect(iso); };
+
+    svg.append('g').selectAll('path').data(shapes).join('path')
+      .attr('class', d => `map-shape${clickable && byIso.has(d.id) ? ' clickable' : ''}`)
+      .attr('d', path).attr('fill', d => fill(d.id))
+      .attr('stroke', surface).attr('stroke-width', 0.6)
+      .on('pointermove', (event, d) => hover(event, d.id, d.properties.name))
+      .on('pointerleave', leave)
+      .on('click', (event, d) => pick(d.id));
+
+    const dots = points.map(p => ({ ...p, xy: projection([p.lon, p.lat]) })).filter(p => p.xy);
+    svg.append('g').selectAll('circle').data(dots).join('circle')
+      .attr('class', d => `map-dot${clickable && byIso.has(d.iso) ? ' clickable' : ''}`)
+      .attr('cx', d => d.xy[0]).attr('cy', d => d.xy[1]).attr('r', 3.2)
+      .attr('fill', d => fill(d.iso)).attr('stroke', token('--muted')).attr('stroke-width', 0.7)
+      .on('pointermove', (event, d) => hover(event, d.iso, d.iso))
+      .on('pointerleave', leave)
+      .on('click', (event, d) => pick(d.iso));
+
+    // Selected country: thick outline (or a ring for a dot) and a label with its value.
+    const selected = byIso.get(opts.selected);
+    if (selected) {
+      const shape = shapes.find(s => s.id === selected.iso);
+      const dot = dots.find(d => d.iso === selected.iso);
+      let anchor = null;
+      if (shape) {
+        svg.append('path').attr('d', path(shape)).attr('fill', 'none').attr('stroke', ink).attr('stroke-width', 2)
+          .attr('pointer-events', 'none');
+        anchor = path.centroid(shape);
+      } else if (dot) {
+        svg.append('circle').attr('cx', dot.xy[0]).attr('cy', dot.xy[1]).attr('r', 7).attr('fill', 'none')
+          .attr('stroke', ink).attr('stroke-width', 2).attr('pointer-events', 'none');
+        anchor = dot.xy;
+      }
+      if (anchor && Number.isFinite(anchor[0])) {
+        const right = anchor[0] > width - 220;
+        svg.append('text').attr('class', 'end-label')
+          .attr('x', anchor[0] + (right ? -12 : 12)).attr('y', anchor[1] - 10)
+          .attr('text-anchor', right ? 'end' : 'start').attr('pointer-events', 'none')
+          .text(`${selected.name}: ${formatValue(selected.value)}${unit}`);
+      }
+    }
+
+    // Legend: one swatch per step, labelled in emissions (top) and grid carbon intensity (bottom).
+    const lg = svg.append('g').attr('class', 'map-legend').attr('transform', `translate(8,${height - legendHeight + 10})`);
+    const sw = Math.max(30, Math.min(70, (width - 170) / MAP_COLORS.length));
+    lg.append('text').attr('class', 'legend-title').attr('x', 0).attr('y', 0)
+      .text(`Emissions of this run${opts.unit ? ` (${opts.unit})` : ''} · darker = more CO₂ for the same energy`);
+    MAP_COLORS.forEach((c, k) => {
+      lg.append('rect').attr('x', k * sw).attr('y', 7).attr('width', sw - 2).attr('height', 12).attr('rx', 2)
+        .attr('fill', c).attr('stroke', NO_DATA).attr('stroke-width', 0.5);
+    });
+    MAP_BINS.forEach((b, k) => {
+      const x = (k + 1) * sw - 1;
+      if (opts.perIntensity) {
+        lg.append('text').attr('class', 'axis-note').attr('x', x).attr('y', 34).attr('text-anchor', 'middle')
+          .text(formatValue(b * opts.perIntensity));
+      }
+      lg.append('text').attr('class', 'axis-note faint').attr('x', x).attr('y', 50).attr('text-anchor', 'middle').text(b);
+    });
+    lg.append('text').attr('class', 'axis-note faint').attr('x', MAP_COLORS.length * sw + 4).attr('y', 50).text('g CO₂eq/kWh');
+    const nd = lg.append('g').attr('transform', `translate(${MAP_COLORS.length * sw + 10},7)`);
+    nd.append('rect').attr('width', 18).attr('height', 12).attr('rx', 2).attr('fill', `url(#${hatchId})`)
+      .attr('stroke', NO_DATA).attr('stroke-width', 0.5);
+    nd.append('text').attr('class', 'axis-note').attr('x', 24).attr('y', 10).text('no data');
+  }
+
+  return { timeSeries, routeChart, countryMap, legend, formatValue, flagUrl };
 })();

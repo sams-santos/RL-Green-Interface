@@ -1,337 +1,252 @@
-"""Convert raw experiment CSV files into the dataset read by the Green RL Playground.
+"""Convert experiment CSV files into the dataset read by the page: data/runs/<run-id>.js and
+data/manifest.js.
 
-Each CSV row is one episode. Expected columns (case-insensitive; common aliases accepted,
-see ALIASES below):
+The input folder holds two kinds of CSV (header names are case-insensitive):
 
-    algorithm, instance, epsilon_decay, reward, gamma, alpha, epsilon_init,   <- configuration
-    episode, duration, emissions, cpu_energy, ram_energy, energy_consumed,      <- per episode
-    distance, path
+* episode files, one row per episode:
+      run_index, algorithm, instance, r_type, episode, distance, Duration_sec, Emissions_kgCO2,
+      CPU_Energy_kWh, RAM_Energy_kWh, Total_Energy_kWh [, epsilon_decay] [, path]
+* summary files (no `episode` column), one row per run:
+      run_index, algorithm, instance, r_type, seed, alpha, gamma, epsilon,
+      carbon_intensity_kgCO2_per_kWh, cpu_measurement, tracking_mode [, epsilon_decay]
 
-Configuration columns may be omitted when a file holds a single run; pass them on the
-command line instead (e.g. --algorithm sarsa --instance eil51 ...).
-Units follow CodeCarbon: duration in seconds, energies in kWh, emissions in kg CO2eq.
-`path` is any sequence of node indices ("0 5 3 ...", "[0, 5, 3]", "0-5-3", "0->5->3").
+Each episode row takes the settings of the summary row with the same (run_index, algorithm,
+instance, r_type). Settings found in neither file can be given as options, e.g.
+--epsilon-decay linear; a missing epsilon decay is stored as "unknown".
+Units follow CodeCarbon: seconds, kWh and kg CO2eq. Episode numbers are kept as in the files.
 
 Usage:
-    python tools/build_dataset.py results/            # every *.csv under results/
-    python tools/build_dataset.py run.csv --algorithm sarsa --instance eil51 \
-        --epsilon-decay linear --reward R1 --gamma 0.9 --alpha 0.15 --epsilon-init 0.1
-    python tools/build_dataset.py results/ --fresh    # drop existing runs (e.g. the demo) first
-
-Output: data/runs/<run-id>.js (one per configuration) and data/manifest.js.
+    python tools/build_dataset.py <results folder> [--fresh] [--epsilon-decay linear]
 """
 import argparse
 import csv
 import json
 import math
 import re
+import statistics
 import sys
-from collections import defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 
-from tsplib_utils import instance_files, read_instance
+from build_reference import instances
 
-ALGORITHMS = ["sarsa", "q-learning", "double-qlearning"]
-EPSILON_DECAYS = ["linear", "convex", "concave", "step", "fixed"]
-REWARDS = ["R1", "R2", "R3"]
-GAMMAS = [0.01, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90, 0.99]
-ALPHAS = [0.01, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90, 0.99]
-EPSILON_INITS = [0.01, 0.05, 0.10]
+DATA = Path(__file__).resolve().parent.parent / "data"
 EPISODES = 10000
-# Instances are whatever TSPLIB files sit in data/instances.
-DIMENSIONS = {name: read_instance(name)["dimension"] for name in instance_files()}
-INSTANCES = list(DIMENSIONS)
 
-CONFIG_KEYS = ["algorithm", "instance", "epsilon_decay", "reward", "gamma", "alpha", "epsilon_init"]
+# Must match PARAMS in js/config.js.
+ALGORITHMS = {"q": "q-learning", "qlearning": "q-learning", "sarsa": "sarsa",
+              "dq": "double-qlearning", "dql": "double-qlearning", "doubleqlearning": "double-qlearning"}
+EPSILON_DECAYS = ["linear", "convex", "concave", "step", "fixed", "unknown"]
+REWARDS = ["R1", "R2", "R3"]
+GRID = [0.01, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90, 0.99]
+EPSILON_INITS = [0.01, 0.05, 0.10]
+DIMENSIONS = {name: info["dimension"] for name, info in instances().items()}
+
+CONFIG_KEYS = ["algorithm", "instance", "epsilon_decay", "reward", "gamma", "alpha", "epsilon_init", "seed"]
 METRIC_KEYS = ["duration", "emissions", "cpu_energy", "ram_energy", "energy_consumed", "distance"]
 
-ALIASES = {
-    "algorithm": ["algorithm", "algo", "agent", "method"],
-    "instance": ["instance", "problem", "instance_name", "tsp_instance"],
-    "epsilon_decay": ["epsilon_decay", "epsilon_decay_type", "decay", "decay_type", "eps_decay"],
-    "reward": ["reward_type", "reward_function", "reward_fn", "reward"],
-    "gamma": ["gamma", "discount", "discount_factor"],
-    "alpha": ["alpha", "learning_rate", "lr"],
-    "epsilon_init": ["epsilon_init", "epsilon_initial", "initial_epsilon", "eps_init", "epsilon_start"],
-    "episode": ["episode", "ep", "episode_id"],
-    "duration": ["duration", "duration_s", "time", "time_s", "episode_duration"],
-    "emissions": ["emissions", "emissions_kg", "emissions_kgco2", "emissionskgco2", "emissions_kg_co2",
-                  "co2_kg", "emissions_kgco2eq"],
-    "cpu_energy": ["cpu_energy", "cpu_energy_kwh"],
-    "ram_energy": ["ram_energy", "ram_energy_kwh"],
-    "gpu_energy": ["gpu_energy", "gpu_energy_kwh"],
-    "energy_consumed": ["energy_consumed", "total_energy", "energy", "energy_kwh", "total_energy_kwh"],
-    "distance": ["distance", "tour_length", "tour_distance", "total_distance", "length", "cost"],
-    "path": ["path", "route", "tour", "caminho"],
-}
+# Canonical key -> accepted (lower-case) column names.
+KEY_COLUMNS = {"run_index": ["run_index"], "algorithm": ["algorithm"], "instance": ["instance"],
+               "reward": ["r_type", "reward"], "epsilon_decay": ["epsilon_decay"]}
+EPISODE_COLUMNS = {**KEY_COLUMNS, "episode": ["episode"], "distance": ["distance"],
+                   "duration": ["duration_sec"], "emissions": ["emissions_kgco2"],
+                   "cpu_energy": ["cpu_energy_kwh"], "ram_energy": ["ram_energy_kwh"],
+                   "energy_consumed": ["total_energy_kwh"], "path": ["path"]}
+SUMMARY_COLUMNS = {**KEY_COLUMNS, "seed": ["seed"], "alpha": ["alpha"], "gamma": ["gamma"],
+                   "epsilon_init": ["epsilon_init", "epsilon"],
+                   "carbon_intensity": ["carbon_intensity_kgco2_per_kwh"],
+                   "cpu_measurement": ["cpu_measurement"], "tracking_mode": ["tracking_mode"]}
 
 
-def normalise_header(name):
-    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
+def find_columns(fieldnames, wanted):
+    """Canonical key -> actual column name, for the keys present in the file."""
+    by_lower = {name.strip().lower(): name for name in fieldnames or []}
+    return {key: by_lower[alias] for key, aliases in wanted.items() for alias in aliases if alias in by_lower}
 
 
-def match_columns(fieldnames):
-    """Map canonical key -> actual CSV column name."""
-    normalised = {normalise_header(f): f for f in fieldnames}
-    found = {}
-    for key, aliases in ALIASES.items():
-        for alias in aliases:
-            if alias in normalised:
-                found[key] = normalised[alias]
-                break
-    return found
-
-
-def canon_algorithm(value):
-    key = re.sub(r"[^a-z]", "", str(value).lower())
-    table = {"sarsa": "sarsa", "qlearning": "q-learning", "ql": "q-learning", "q": "q-learning",
-             "doubleqlearning": "double-qlearning", "doubleq": "double-qlearning", "dql": "double-qlearning",
-             "dqlearning": "double-qlearning"}
-    if key not in table:
-        raise ValueError(f"unknown algorithm {value!r} (expected one of {ALGORITHMS})")
-    return table[key]
-
-
-def canon_choice(value, choices, label):
+def snap(value, choices, label):
+    """The grid value equal to `value` (numbers) or matching it case-insensitively (text)."""
     for choice in choices:
-        if str(value).strip().lower() == choice.lower():
+        if isinstance(choice, float) and abs(float(value) - choice) < 1e-6:
             return choice
-    raise ValueError(f"unknown {label} {value!r} (expected one of {choices})")
-
-
-def canon_reward(value):
-    text = str(value).strip().upper()
-    if re.fullmatch(r"\d", text):
-        text = "R" + text
-    return canon_choice(text, REWARDS, "reward")
-
-
-def canon_number(value, grid, label):
-    number = float(value)
-    for g in grid:
-        if abs(number - g) < 1e-6:
-            return g
-    raise ValueError(f"{label}={value} is not in the grid {grid}")
+        if isinstance(choice, str) and str(value).strip().lower() == choice.lower():
+            return choice
+    raise ValueError(f"{label} {value!r} is not one of {choices}")
 
 
 def canon_config(raw):
+    algorithm = re.sub(r"[^a-z]", "", str(raw["algorithm"]).lower())
+    if algorithm not in ALGORITHMS:
+        raise ValueError(f"unknown algorithm {raw['algorithm']!r}")
+    reward = str(raw["reward"]).strip().upper()
     return {
-        "algorithm": canon_algorithm(raw["algorithm"]),
-        "instance": canon_choice(raw["instance"], INSTANCES, "instance"),
-        "epsilon_decay": canon_choice(raw["epsilon_decay"], EPSILON_DECAYS, "epsilon_decay"),
-        "reward": canon_reward(raw["reward"]),
-        "gamma": canon_number(raw["gamma"], GAMMAS, "gamma"),
-        "alpha": canon_number(raw["alpha"], ALPHAS, "alpha"),
-        "epsilon_init": canon_number(raw["epsilon_init"], EPSILON_INITS, "epsilon_init"),
+        "algorithm": ALGORITHMS[algorithm],
+        "instance": snap(re.sub(r"\.a?tsp$", "", str(raw["instance"]).strip(), flags=re.I), list(DIMENSIONS), "instance"),
+        "epsilon_decay": snap(raw["epsilon_decay"], EPSILON_DECAYS, "epsilon_decay"),
+        "reward": snap(reward if reward.startswith("R") else "R" + reward, REWARDS, "reward"),
+        "gamma": snap(raw["gamma"], GRID, "gamma"),
+        "alpha": snap(raw["alpha"], GRID, "alpha"),
+        "epsilon_init": snap(raw["epsilon_init"], EPSILON_INITS, "epsilon_init"),
+        "seed": int(float(raw["seed"])),
     }
 
 
 def run_id(config):
     """Must match runId() in js/config.js."""
     return (f"{config['algorithm']}_{config['instance']}_{config['epsilon_decay']}_{config['reward']}"
-            f"_g{config['gamma']:.2f}_a{config['alpha']:.2f}_e{config['epsilon_init']:.2f}")
+            f"_g{config['gamma']:.2f}_a{config['alpha']:.2f}_e{config['epsilon_init']:.2f}_s{config['seed']}")
 
 
-def parse_float(text):
-    if text is None or str(text).strip() in ("", "nan", "NaN", "None", "null"):
-        return None
-    return float(text)
-
-
-def parse_path(text):
-    if text is None:
-        return None
-    nodes = [int(n) for n in re.findall(r"\d+", str(text))]
-    return nodes or None
-
-
-def run_length(data):
-    pairs = []
-    for value in data:
-        if pairs and pairs[-2] == value:
-            pairs[-1] += 1
-        else:
-            pairs += [value, 1]
-    return pairs
+def number(text):
+    text = str(text).strip() if text is not None else ""
+    return None if text.lower() in ("", "nan", "none", "null") else float(text)
 
 
 def encode_column(values, digits=4):
-    """Store a column as integers times a power-of-ten scale (`digits` significant digits
-    relative to the largest value); integer columns keep full precision. Columns that stay
-    constant over stretches of episodes are run-length encoded as [value, count, ...]."""
+    """Integers times a power-of-ten scale (`digits` significant digits of the largest value).
+    Columns with long runs of equal values are run-length encoded as [value, count, ...]."""
     present = [abs(v) for v in values if v is not None]
-    if not present or all(float(v).is_integer() for v in present):
-        exponent = 0
-    else:
-        exponent = math.floor(math.log10(max(present))) - (digits - 1) if max(present) > 0 else 0
-    scale = 10.0 ** exponent
-    data = [None if v is None else int(round(v / scale)) for v in values]
+    exponent = 0
+    if present and max(present) > 0 and not all(float(v).is_integer() for v in present):
+        exponent = math.floor(math.log10(max(present))) - (digits - 1)
+    data = [None if v is None else int(round(v / 10.0 ** exponent)) for v in values]
+    rle = []
+    for value in data:
+        if rle and rle[-2] == value:
+            rle[-1] += 1
+        else:
+            rle += [value, 1]
     column = {"scale": 1 if exponent == 0 else float(f"1e{exponent}")}
-    rle = run_length(data)
-    if len(rle) < len(data) * 0.6:
-        column["rle"] = rle
-    else:
-        column["data"] = data
+    column.update({"rle": rle} if len(rle) < len(data) * 0.6 else {"data": data})
     return column
 
 
-def write_run(out_dir, config, episodes, demo=False):
-    """Write one run file.
+def write_run(config, summary, by_episode):
+    """Write data/runs/<run-id>.js for one run; by_episode maps episode number -> record."""
+    rid = run_id(config)
+    first = min(by_episode)
+    numbers = range(first, first + min(EPISODES, max(by_episode) - first + 1))
+    missing = sum(1 for n in numbers if n not in by_episode)
+    if missing:
+        print(f"  ! {rid}: {missing} missing episodes, stored as empty")
+    episodes = [by_episode.get(n, {}) for n in numbers]
 
-    episodes: list (ordered by episode number, starting at 1) of dicts with the METRIC_KEYS
-    plus `path` (list of 0-based node indices or None).
-    """
-    unique_paths, path_index, path_ids = [], {}, []
-    for ep in episodes:
-        path = ep.get("path")
-        if path is None:
-            path_ids.append(None)
-            continue
-        key = " ".join(map(str, path))
-        if key not in path_index:
-            path_index[key] = len(unique_paths)
-            unique_paths.append(key)
-        path_ids.append(path_index[key])
+    paths = [ep.get("path") for ep in episodes]
+    if any(paths) and min(min(p) for p in paths if p) >= 1 and \
+            max(max(p) for p in paths if p) == DIMENSIONS[config["instance"]]:
+        paths = [[n - 1 for n in p] if p else p for p in paths]  # 1-based -> 0-based
+    unique = list(dict.fromkeys(" ".join(map(str, p)) for p in paths if p))
+    index = {key: k for k, key in enumerate(unique)}
+
+    intensity = summary.get("carbon_intensity")
+    if intensity is None:  # not recorded: recover it from emissions / energy
+        ratios = [ep["emissions"] / ep["energy_consumed"] for ep in episodes
+                  if ep.get("emissions") is not None and ep.get("energy_consumed")]
+        intensity = statistics.median(ratios) * 1000 if ratios else None
 
     payload = {
-        "id": run_id(config),
+        "id": rid,
         "config": config,
-        "demo": demo,
-        "units": {"duration": "s", "energy": "kWh", "emissions": "kg CO2eq"},
         "episodes": len(episodes),
+        "firstEpisode": first,
+        "carbonIntensity": round(intensity, 3) if intensity else None,
+        "measurement": {k: summary[k] for k in ("cpu_measurement", "tracking_mode") if summary.get(k)},
         "columns": {key: encode_column([ep.get(key) for ep in episodes]) for key in METRIC_KEYS},
-        "pathIndex": encode_column(path_ids),
-        "paths": unique_paths,
+        "pathIndex": encode_column([index[" ".join(map(str, p))] if p else None for p in paths]),
+        "paths": unique,
     }
-    runs_dir = Path(out_dir) / "runs"
-    runs_dir.mkdir(parents=True, exist_ok=True)
-    target = runs_dir / f"{payload['id']}.js"
-    target.write_text("GreenRL.registerRun(" + json.dumps(payload, separators=(",", ":")) + ");\n",
-                      encoding="utf-8")
-    return payload["id"], target
+    target = DATA / "runs" / f"{rid}.js"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("GreenRL.registerRun(" + json.dumps(payload, separators=(",", ":")) + ");\n", encoding="utf-8")
+    print(f"  {rid}: episodes {first}-{numbers[-1]}")
+    return rid
 
 
-def read_manifest(out_dir):
-    path = Path(out_dir) / "manifest.js"
-    if not path.exists():
-        return []
-    match = re.search(r"=\s*(\{.*\})\s*;", path.read_text(encoding="utf-8"), re.S)
-    return json.loads(match.group(1)).get("runs", []) if match else []
+def read_rows(file):
+    with open(file, newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        return reader.fieldnames or [], list(reader)
 
 
-def write_manifest(out_dir, run_ids):
-    path = Path(out_dir) / "manifest.js"
-    body = {
-        "episodes": EPISODES,
-        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "runs": sorted(set(run_ids)),
-    }
-    text = json.dumps(body, indent=1).replace('\n  "', ' "')
-    path.write_text("// Generated by tools/build_dataset.py. Lists every run available in data/runs/.\n"
-                    "window.GREEN_RL_MANIFEST = " + text + ";\n", encoding="utf-8")
-    return path
+def run_key(row, columns):
+    """(run_index, algorithm, instance, reward): identifies one run across episode and summary files."""
+    return tuple(cell(row, columns, k).lower() for k in ("run_index", "algorithm", "instance", "reward"))
 
 
-def collect_csv_files(inputs):
-    files = []
-    for item in inputs:
-        p = Path(item)
-        if p.is_dir():
-            files.extend(sorted(p.rglob("*.csv")))
-        elif any(ch in item for ch in "*?["):
-            files.extend(sorted(Path().glob(item)))
-        else:
-            files.append(p)
-    return files
+def cell(row, columns, key):
+    """The row's value for a canonical key, or "" when the file has no such column."""
+    return (row.get(columns[key]) or "").strip() if key in columns else ""
 
 
-def read_groups(files, defaults):
-    """Return {run_id: (config, {episode: row})}."""
-    groups = {}
+def read_summaries(files):
+    table = {}
     for file in files:
-        with open(file, newline="", encoding="utf-8-sig") as handle:
-            reader = csv.DictReader(handle)
-            columns = match_columns(reader.fieldnames or [])
-            missing = [k for k in CONFIG_KEYS if k not in columns and defaults.get(k) is None]
-            if missing:
-                sys.exit(f"{file}: missing configuration {missing}; add columns or pass --{missing[0].replace('_', '-')}")
-            if "episode" not in columns:
-                sys.exit(f"{file}: no 'episode' column")
-            for line_no, row in enumerate(reader, start=2):
-                raw = {k: row[columns[k]] if k in columns else defaults[k] for k in CONFIG_KEYS}
-                try:
-                    config = canon_config(raw)
-                except ValueError as err:
-                    sys.exit(f"{file}:{line_no}: {err}")
-                rid = run_id(config)
-                record = {k: parse_float(row.get(columns[k])) if k in columns else None
-                          for k in METRIC_KEYS + ["gpu_energy"]}
-                record["path"] = parse_path(row.get(columns["path"])) if "path" in columns else None
-                episode = int(float(row[columns["episode"]]))
-                groups.setdefault(rid, (config, {}))[1][episode] = record
-    return groups
+        fieldnames, rows = read_rows(file)
+        columns = find_columns(fieldnames, SUMMARY_COLUMNS)
+        for row in rows:
+            info = {k: row[c].strip() for k, c in columns.items() if row.get(c, "").strip()}
+            if "carbon_intensity" in info:
+                info["carbon_intensity"] = float(info["carbon_intensity"]) * 1000  # kg -> g per kWh
+            table.setdefault(run_key(row, columns), {}).update(info)
+    return table
 
 
-def normalise_paths(episodes, dimension, path_base):
-    paths = [ep["path"] for ep in episodes if ep["path"]]
-    if not paths:
-        return
-    if path_base == "auto":
-        lo = min(min(p) for p in paths)
-        hi = max(max(p) for p in paths)
-        path_base = 1 if lo >= 1 and hi == dimension else 0
-    for ep in episodes:
-        if ep["path"]:
-            ep["path"] = [n - int(path_base) for n in ep["path"]]
+def read_episodes(file, summaries, options):
+    """{run_id: (config, summary, {episode: record})} for one episode file."""
+    fieldnames, rows = read_rows(file)
+    columns = find_columns(fieldnames, EPISODE_COLUMNS)
+    runs = {}
+    for line, row in enumerate(rows, start=2):
+        summary = summaries.get(run_key(row, columns), {})
+        raw = {}
+        for key in CONFIG_KEYS:
+            value = cell(row, columns, key) or summary.get(key) or options.get(key)
+            raw[key] = value or ("unknown" if key == "epsilon_decay" else None)
+        try:
+            if None in raw.values():
+                missing = [k for k, v in raw.items() if v is None]
+                raise ValueError(f"no value for {', '.join(missing)}: add a summary file or an option")
+            config = canon_config(raw)
+        except ValueError as err:
+            sys.exit(f"{file}:{line}: {err}")
+        record = {key: number(cell(row, columns, key)) for key in METRIC_KEYS}
+        if "path" in columns:
+            record["path"] = [int(n) for n in re.findall(r"\d+", row[columns["path"]])] or None
+        runs.setdefault(run_id(config), (config, summary, {}))[2][int(float(row[columns["episode"]]))] = record
+    return runs
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("inputs", nargs="+", help="CSV files, directories or glob patterns")
-    parser.add_argument("--out", default=str(Path(__file__).resolve().parent.parent / "data"),
-                        help="output data directory (default: ./data)")
-    parser.add_argument("--fresh", action="store_true",
-                        help="delete every existing run (including the demo data) before writing")
-    parser.add_argument("--path-base", choices=["auto", "0", "1"], default="auto",
-                        help="whether node indices in `path` start at 0 or 1 (default: auto-detect)")
+    parser.add_argument("folder", help="folder with the episode and summary CSV files")
+    parser.add_argument("--fresh", action="store_true", help="delete the existing runs first")
     for key in CONFIG_KEYS:
-        parser.add_argument("--" + key.replace("_", "-"), dest=key, help=f"{key} for files without that column")
+        parser.add_argument("--" + key.replace("_", "-"), dest=key, help=f"{key} for runs that do not record it")
     args = parser.parse_args()
 
-    files = collect_csv_files(args.inputs)
-    if not files:
-        sys.exit("No CSV files found.")
-    groups = read_groups(files, {k: getattr(args, k) for k in CONFIG_KEYS})
+    files = sorted(Path(args.folder).rglob("*.csv"))
+    episode_files = [f for f in files if "episode" in find_columns(read_rows(f)[0], EPISODE_COLUMNS)]
+    summaries = read_summaries([f for f in files if f not in episode_files])
+    if not episode_files:
+        sys.exit(f"No episode CSV files in {args.folder}.")
+    print(f"{len(episode_files)} episode file(s), {len(summaries)} run(s) described in summary files")
+
     if args.fresh:
-        for old in (Path(args.out) / "runs").glob("*.js"):
+        for old in (DATA / "runs").glob("*.js"):
             old.unlink()
+    options = {k: getattr(args, k) for k in CONFIG_KEYS}
+    written = set()
+    for file in episode_files:  # one file at a time keeps memory bounded; a run must not span files
+        print(file.name)
+        for rid, (config, summary, by_episode) in sorted(read_episodes(file, summaries, options).items()):
+            if rid in written:
+                sys.exit(f"{rid} appears in more than one episode file; merge them first.")
+            written.add(write_run(config, summary, by_episode))
 
-    written = []
-    for rid, (config, by_episode) in sorted(groups.items()):
-        numbers = sorted(by_episode)
-        if numbers[0] == 0:  # 0-based episode counters
-            by_episode = {n + 1: v for n, v in by_episode.items()}
-            numbers = sorted(by_episode)
-        if numbers[-1] > EPISODES:
-            print(f"  ! {rid}: {numbers[-1]} episodes, keeping the first {EPISODES}")
-        last = min(numbers[-1], EPISODES)
-        gaps = [n for n in range(1, last + 1) if n not in by_episode]
-        if gaps:
-            print(f"  ! {rid}: {len(gaps)} missing episodes (first: {gaps[0]}), stored as empty")
-        empty = {k: None for k in METRIC_KEYS + ["gpu_energy", "path"]}
-        episodes = [by_episode.get(n, dict(empty)) for n in range(1, last + 1)]
-        for ep in episodes:
-            if ep["energy_consumed"] is None and ep["cpu_energy"] is not None and ep["ram_energy"] is not None:
-                ep["energy_consumed"] = ep["cpu_energy"] + ep["ram_energy"] + (ep["gpu_energy"] or 0)
-        normalise_paths(episodes, DIMENSIONS[config["instance"]], args.path_base)
-        run, target = write_run(args.out, config, episodes)
-        written.append(run)
-        print(f"  {run}: {last} episodes -> {target.name}")
-
-    existing = [] if args.fresh else read_manifest(args.out)
-    manifest = write_manifest(args.out, existing + written)
-    print(f"Wrote {len(written)} run(s); manifest lists {len(set(existing + written))} run(s): {manifest}")
+    runs = sorted(p.stem for p in (DATA / "runs").glob("*.js"))
+    (DATA / "manifest.js").write_text(
+        "// Generated by tools/build_dataset.py. Do not edit by hand.\n"
+        "window.GREEN_RL_MANIFEST = " + json.dumps({"runs": runs}, indent=1) + ";\n", encoding="utf-8")
+    print(f"Wrote {len(written)} run(s); data/manifest.js lists {len(runs)}.")
 
 
 if __name__ == "__main__":

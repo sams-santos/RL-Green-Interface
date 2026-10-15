@@ -1,36 +1,253 @@
+// Page controller: shared settings (grid, units), country picker, Explore tab and report export.
+// Loaded last; it wires the other modules (config, data, charts, equivalents, report, compare).
 (() => {
   const { PARAMS, valueKey, displayValue, runId, parseRunId } = GreenRLConfig;
-  const { formatValue } = GreenRLCharts;
+  const { formatValue, flagUrl } = GreenRLCharts;
+  const { instances = {}, countries = [] } = window.GREEN_RL_REFERENCE || {};
+  const countryByIso = Object.fromEntries(countries.map(c => [c.iso, c]));
   const manifest = window.GREEN_RL_MANIFEST || { runs: [] };
-  const instances = window.GREEN_RL_INSTANCES || {};
   const available = new Set(manifest.runs);
+  GreenRLConfig.extendWithDataset(manifest.runs);
 
   const ENERGY_UNITS = { kWh: 1, Wh: 1e3, J: 3.6e6 };
   const EMISSION_UNITS = { kg: 1, g: 1e3, mg: 1e6 };
   const SPEEDS = [10, 50, 100, 250, 500, 1000, 2500];
   const TICK_MS = 100;
+  const MEASURED = 'measured';
 
   const $ = id => document.getElementById(id);
   const fmtInt = d3.format(',');
+  const icon = name => GreenRLIcons.el(name);
 
+  // Settings shared by both tabs.
+  const settings = {
+    tab: 'explore',
+    country: MEASURED,   // ISO3 code, or MEASURED for the intensity recorded with each run
+    energyUnit: 'kWh',
+    emissionsUnit: 'kg'
+  };
+
+  // Explore tab.
   const state = {
     config: null,
     run: null,
-    episode: 1,
+    episode: 1,          // position 1..n (episodes shown so far)
     timer: null,
     carry: 0,
     speed: 250,
     mode: 'episode',
-    energyUnit: 'kWh',
-    emissionsUnit: 'kg',
     showBest: true,
     loadToken: 0
   };
 
+  // ---------- Helpers shared with the compare tab ----------
+
+  const energyText = v => `${formatValue(v * ENERGY_UNITS[settings.energyUnit])} ${settings.energyUnit}`;
+  const emissionsText = v => `${formatValue(v * EMISSION_UNITS[settings.emissionsUnit])} ${settings.emissionsUnit}`;
+  const epLabel = (run, index) => fmtInt(index + run.firstEpisode);  // 0-based index -> number in the data
+
+  function durationText(seconds) {
+    if (!Number.isFinite(seconds)) return '—';
+    if (seconds < 60) return `${formatValue(seconds)} s`;
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.round(seconds % 60);
+    return h ? `${h} h ${String(m).padStart(2, '0')} min` : `${m} min ${String(s).padStart(2, '0')} s`;
+  }
+
+  function gapText(run, distance) {
+    const opt = instances[run.config.instance]?.optimum;
+    if (!opt || !Number.isFinite(distance)) return '—';
+    return `${d3.format('+.1f')(((distance - opt) / opt) * 100)}%`;
+  }
+
+  // The country whose grid intensity matches what the experiment measured, if any.
+  function measuredCountry(run) {
+    if (!run || !Number.isFinite(run.carbonIntensity)) return null;
+    return countries.find(c => Math.abs(c.intensity - run.carbonIntensity) < 0.01) || null;
+  }
+
+  // CO2eq = C × E. "As measured" uses the emissions column; a country rescales the energy column.
+  function emissionsBasis(run) {
+    const c = countryByIso[settings.country];
+    if (!c) {
+      const match = measuredCountry(run);
+      return {
+        perEpisode: run.cols.emissions, cumulative: run.cumulative.emissions, factor: 1,
+        intensity: run.carbonIntensity, iso: match?.iso ?? null, flag: match?.flag ?? null,
+        label: match ? `as measured (${match.name})` : 'as measured'
+      };
+    }
+    return {
+      perEpisode: run.cols.energy_consumed, cumulative: run.cumulative.energy_consumed, factor: c.intensity / 1000,
+      intensity: c.intensity, iso: c.iso, flag: c.flag, label: c.name, year: c.year
+    };
+  }
+
+  function gridText(basis) {
+    if (!Number.isFinite(basis.intensity)) return 'carbon intensity not recorded for this run';
+    return `C = ${formatValue(basis.intensity)} g CO₂eq/kWh · ${basis.label}` + (basis.year ? ` (${basis.year} data)` : '');
+  }
+
+  // A form with one select per parameter; options without a run (given the other values) get ∅.
+  function configForm(container, prefix, getConfig, onChange) {
+    const selects = PARAMS.map(param => {
+      const wrap = document.createElement('div');
+      const label = document.createElement('label');
+      label.htmlFor = `${prefix}-${param.key}`;
+      label.textContent = param.label;
+      const select = document.createElement('select');
+      select.id = `${prefix}-${param.key}`;
+      param.values.forEach(value => select.add(new Option(displayValue(param, value), valueKey(param, value))));
+      select.addEventListener('change', () => {
+        getConfig()[param.key] = param.values.find(v => valueKey(param, v) === select.value);
+        onChange();
+      });
+      wrap.append(label, select);
+      container.appendChild(wrap);
+      return select;
+    });
+    return function sync() {
+      const config = getConfig();
+      PARAMS.forEach((param, k) => {
+        selects[k].value = valueKey(param, config[param.key]);
+        [...selects[k].options].forEach((option, i) => {
+          const has = available.has(runId({ ...config, [param.key]: param.values[i] }));
+          option.textContent = displayValue(param, param.values[i]) + (has ? '' : ' ∅');
+          option.classList.toggle('unavailable', !has);
+        });
+      });
+    };
+  }
+
+  // Runs in the dataset ordered by how many parameters differ from `config`.
+  function nearestRuns(config) {
+    return manifest.runs.map(parseRunId).filter(Boolean).map(c => ({
+      config: c, diffs: PARAMS.filter(p => valueKey(p, c[p.key]) !== valueKey(p, config[p.key]))
+    })).sort((a, b) => a.diffs.length - b.diffs.length);
+  }
+
+  // ---------- Country picker (with flags) ----------
+
+  function flagImg(code) {
+    const img = document.createElement('img');
+    img.className = 'flag';
+    img.alt = '';
+    img.loading = 'lazy';
+    if (code) img.src = flagUrl(code);
+    else img.classList.add('flag-empty');
+    return img;
+  }
+
+  function countryPicker(root, onSelect) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'picker-button';
+    button.setAttribute('aria-haspopup', 'listbox');
+    button.setAttribute('aria-expanded', 'false');
+    button.setAttribute('aria-labelledby', 'country-label');
+
+    const panel = document.createElement('div');
+    panel.className = 'picker-panel';
+    panel.hidden = true;
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.placeholder = 'Search a country…';
+    search.setAttribute('aria-label', 'Search a country');
+    const list = document.createElement('ul');
+    list.setAttribute('role', 'listbox');
+    list.id = 'country-options';
+    panel.append(search, list);
+    root.append(button, panel);
+
+    const items = [{ value: MEASURED, name: 'As measured in the experiment', flag: null, meta: 'recorded C' },
+      ...countries.map(c => ({ value: c.iso, name: c.name, flag: c.flag, meta: `${formatValue(c.intensity)} g/kWh` }))];
+    const nodes = items.map((item, k) => {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      li.id = `country-opt-${k}`;
+      const name = document.createElement('span');
+      name.className = 'picker-name';
+      name.textContent = item.name;
+      const meta = document.createElement('span');
+      meta.className = 'picker-meta';
+      meta.textContent = item.meta;
+      li.append(flagImg(item.flag), name, meta);
+      li.addEventListener('click', () => choose(item.value));
+      list.appendChild(li);
+      return li;
+    });
+    let active = -1;
+
+    const visible = () => nodes.filter(n => !n.hidden);
+    function setActive(node) {
+      nodes.forEach(n => n.classList.toggle('active', n === node));
+      active = nodes.indexOf(node);
+      if (node) {
+        search.setAttribute('aria-activedescendant', node.id);
+        node.scrollIntoView({ block: 'nearest' });
+      }
+    }
+    function open() {
+      panel.hidden = false;
+      button.setAttribute('aria-expanded', 'true');
+      search.value = '';
+      nodes.forEach(n => { n.hidden = false; });
+      setActive(nodes[items.findIndex(i => i.value === settings.country)]);
+      search.focus();
+    }
+    function close(focusButton) {
+      panel.hidden = true;
+      button.setAttribute('aria-expanded', 'false');
+      if (focusButton) button.focus();
+    }
+    function choose(value) {
+      close(true);
+      if (value !== settings.country) onSelect(value);
+    }
+
+    button.addEventListener('click', () => (panel.hidden ? open() : close(false)));
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      items.forEach((item, k) => {
+        nodes[k].hidden = q !== '' && !item.name.toLowerCase().includes(q) && !item.value.toLowerCase().includes(q);
+      });
+      setActive(visible()[0] || null);
+    });
+    search.addEventListener('keydown', e => {
+      const vis = visible();
+      const pos = vis.indexOf(nodes[active]);
+      if (e.key === 'ArrowDown') { e.preventDefault(); setActive(vis[Math.min(vis.length - 1, pos + 1)] || null); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setActive(vis[Math.max(0, pos - 1)] || null); }
+      if (e.key === 'Enter' && active >= 0) { e.preventDefault(); choose(items[active].value); }
+      if (e.key === 'Escape') close(true);
+      if (e.key === 'Tab') close(false);
+    });
+    document.addEventListener('pointerdown', e => { if (!root.contains(e.target)) close(false); });
+
+    // Button shows the current choice; "as measured" borrows the matching country's flag.
+    return function refresh(measured) {
+      const c = countryByIso[settings.country];
+      const meta = document.createElement('span');
+      meta.className = 'picker-meta';
+      meta.textContent = c ? `${formatValue(c.intensity)} g/kWh`
+        : measured ? `${measured.name}, ${formatValue(measured.intensity)} g/kWh` : 'recorded C';
+      const name = document.createElement('span');
+      name.className = 'picker-name';
+      name.textContent = c ? c.name : 'As measured in the experiment';
+      const chevron = document.createElement('span');
+      chevron.className = 'chevron';
+      chevron.textContent = '▾';
+      button.replaceChildren(flagImg(c ? c.flag : measured?.flag), name, meta, chevron);
+    };
+  }
+
   // ---------- Setup ----------
 
+  const hash = new URLSearchParams(location.hash.slice(1));
+
   function initialConfig() {
-    const hash = new URLSearchParams(location.hash.slice(1));
+    if (countryByIso[hash.get('country')]) settings.country = hash.get('country');
     const fromHash = parseRunId(hash.get('run'));
     if (fromHash) {
       const ep = Number(hash.get('ep'));
@@ -41,55 +258,27 @@
     return Object.fromEntries(PARAMS.map(p => [p.key, p.values[0]]));
   }
 
-  function buildConfigForm() {
-    const form = $('config-form');
-    PARAMS.forEach(param => {
-      const wrap = document.createElement('div');
-      const label = document.createElement('label');
-      label.htmlFor = `param-${param.key}`;
-      label.textContent = param.label;
-      const select = document.createElement('select');
-      select.id = `param-${param.key}`;
-      param.values.forEach(value => {
-        const option = document.createElement('option');
-        option.value = valueKey(param, value);
-        option.textContent = displayValue(param, value);
-        select.appendChild(option);
-      });
-      select.addEventListener('change', () => {
-        state.config[param.key] = param.numeric ? Number(select.value) : select.value;
-        onConfigChange();
-      });
-      wrap.append(label, select);
-      form.appendChild(wrap);
-    });
-  }
-
-  function syncConfigForm() {
-    PARAMS.forEach(param => {
-      const select = $(`param-${param.key}`);
-      select.value = valueKey(param, state.config[param.key]);
-      [...select.options].forEach((option, i) => {
-        const value = param.values[i];
-        const has = available.has(runId({ ...state.config, [param.key]: value }));
-        option.textContent = displayValue(param, value) + (has ? '' : ' ∅');
-        option.classList.toggle('unavailable', !has);
-      });
-    });
-    $('run-id').textContent = runId(state.config);
-  }
+  let syncExploreForm;
+  let refreshPicker;
 
   function buildControls() {
+    syncExploreForm = configForm($('config-form'), 'param', () => state.config, onConfigChange);
+    refreshPicker = countryPicker($('country-picker'), iso => { settings.country = iso; onSettingsChange(); });
+
     SPEEDS.forEach(s => $('speed-select').add(new Option(`${fmtInt(s)} episodes / s`, s)));
     $('speed-select').value = state.speed;
     $('speed-select').addEventListener('change', e => { state.speed = Number(e.target.value); });
 
     Object.keys(ENERGY_UNITS).forEach(u => $('energy-unit').add(new Option(u, u)));
     Object.keys(EMISSION_UNITS).forEach(u => $('emissions-unit').add(new Option(`${u} CO₂eq`, u)));
-    $('energy-unit').value = state.energyUnit;
-    $('emissions-unit').value = state.emissionsUnit;
-    $('energy-unit').addEventListener('change', e => { state.energyUnit = e.target.value; render(); });
-    $('emissions-unit').addEventListener('change', e => { state.emissionsUnit = e.target.value; render(); });
+    $('energy-unit').value = settings.energyUnit;
+    $('emissions-unit').value = settings.emissionsUnit;
+    $('energy-unit').addEventListener('change', e => { settings.energyUnit = e.target.value; onSettingsChange(); });
+    $('emissions-unit').addEventListener('change', e => { settings.emissionsUnit = e.target.value; onSettingsChange(); });
+
+    document.querySelectorAll('.tabs [role="tab"]').forEach(tab => {
+      tab.addEventListener('click', () => showTab(tab.dataset.tab));
+    });
 
     document.querySelectorAll('.segmented button').forEach(button => {
       button.addEventListener('click', () => {
@@ -103,30 +292,93 @@
     $('restart-btn').addEventListener('click', () => { seek(1); play(); });
     $('end-btn').addEventListener('click', () => { pause(); seek(state.run ? state.run.n : 1); });
     $('episode-range').addEventListener('input', e => { pause(); seek(Number(e.target.value)); });
-    $('episode-input').addEventListener('change', e => { pause(); seek(Number(e.target.value)); });
+    // The number box shows episode numbers as in the data (which may start at 0).
+    $('episode-input').addEventListener('change', e => {
+      pause();
+      if (state.run) seek(Number(e.target.value) - state.run.firstEpisode + 1);
+    });
     $('show-best').addEventListener('change', e => { state.showBest = e.target.checked; render(); });
+
+    // In-page links (contents, citations, sources) scroll without touching the URL, which holds the view.
+    document.addEventListener('click', e => {
+      const link = e.target.closest('a[href^="#"]');
+      const target = link && document.getElementById(link.getAttribute('href').slice(1));
+      if (!target) return;
+      e.preventDefault();
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      target.classList.remove('flash');
+      void target.offsetWidth;
+      target.classList.add('flash');
+    });
 
     $('report-btn').addEventListener('click', openReportDialog);
     $('report-pdf').addEventListener('click', () => exportReport('pdf'));
     $('report-html').addEventListener('click', () => exportReport('html'));
 
     document.addEventListener('keydown', e => {
-      if (!state.run || $('report-dialog').open || e.target.closest('input, select, textarea, button, [tabindex]')) return;
+      if (settings.tab !== 'explore' || !state.run || $('report-dialog').open ||
+        e.target.closest('input, select, textarea, button, [tabindex]')) return;
       if (e.key === ' ') { e.preventDefault(); state.timer ? pause() : play(); }
       if (e.key === 'ArrowRight') { pause(); seek(state.episode + (e.shiftKey ? 100 : 1)); }
       if (e.key === 'ArrowLeft') { pause(); seek(state.episode - (e.shiftKey ? 100 : 1)); }
     });
 
     let resizeTimer;
-    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => (settings.tab === 'explore' ? render() : GreenRLCompare.render()), 150);
+    });
+  }
+
+  function showTab(tab) {
+    settings.tab = tab;
+    pause();
+    document.querySelectorAll('.tabs [role="tab"]').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === tab)));
+    ['explore', 'compare', 'concepts'].forEach(name => { $(`tab-${name}`).hidden = name !== tab; });
+    // The grid and unit controls live in the configuration panel of the open tab.
+    if (tab !== 'concepts') $(`${tab}-settings-slot`).appendChild($('grid-settings'));
+    if (tab === 'compare') GreenRLCompare.show(state.config);
+    else render();
+    updateGridSettings();
+    updateHash();
+  }
+
+  function onSettingsChange() {
+    updateGridSettings();
+    updateHash();
+    if (settings.tab === 'explore') render();
+    else GreenRLCompare.render();
+  }
+
+  function updateGridSettings() {
+    const measured = settings.tab === 'explore' ? measuredCountry(state.run) : GreenRLCompare.measuredCountry();
+    refreshPicker(measured);
+    const c = countryByIso[settings.country];
+    $('grid-info').textContent = c
+      ? `CO₂eq = E × C · ${c.name}, ${c.year} data`
+      : 'CO₂eq = E × C · C recorded with each run';
+  }
+
+  function updateHash() {
+    const params = new URLSearchParams();
+    if (settings.tab === 'compare') {
+      params.set('tab', 'compare');
+      Object.entries(GreenRLCompare.hashParams()).forEach(([k, v]) => params.set(k, v));
+    } else {
+      if (settings.tab === 'concepts') params.set('tab', 'concepts');
+      params.set('run', runId(state.config));
+      params.set('ep', state.episode);
+    }
+    if (settings.country !== MEASURED) params.set('country', settings.country);
+    history.replaceState(null, '', `#${params}`);
   }
 
   // ---------- Loading ----------
 
   function onConfigChange() {
     pause();
-    syncConfigForm();
+    syncExploreForm();
+    $('run-id').textContent = runId(state.config);
     updateHash();
     load();
   }
@@ -148,12 +400,15 @@
       $('empty-state').hidden = true;
       $('dashboard').hidden = false;
       $('dashboard').classList.remove('is-loading');
-      $('demo-banner').hidden = !run.demo;
       $('report-btn').disabled = false;
       $('episode-range').max = run.n;
-      $('episode-input').max = run.n;
-      $('episode-max').textContent = fmtInt(run.n);
+      $('episode-input').min = run.firstEpisode;
+      $('episode-input').max = run.firstEpisode + run.n - 1;
+      $('episode-max').textContent = fmtInt(run.firstEpisode + run.n - 1);
+      $('path-panel').hidden = !run.hasPaths;
+      document.querySelector('.perf-grid').classList.toggle('single', !run.hasPaths);
       $('status-pill').textContent = 'Paused';
+      updateGridSettings();
       render();
     }).catch(err => {
       if (token !== state.loadToken) return;
@@ -177,13 +432,7 @@
     const box = $('nearest-runs');
     box.replaceChildren();
     if (errorMessage) return;
-    const scored = manifest.runs.map(id => {
-      const config = parseRunId(id);
-      const diffs = config ? PARAMS.filter(p => valueKey(p, config[p.key]) !== valueKey(p, state.config[p.key])) : PARAMS;
-      return { config, diffs };
-    }).filter(r => r.config).sort((a, b) => a.diffs.length - b.diffs.length).slice(0, 6);
-
-    scored.forEach(({ config, diffs }) => {
+    nearestRuns(state.config).slice(0, 6).forEach(({ config, diffs }) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'secondary';
@@ -191,11 +440,6 @@
       button.addEventListener('click', () => { state.config = config; onConfigChange(); });
       box.appendChild(button);
     });
-  }
-
-  function updateHash() {
-    const params = new URLSearchParams({ run: runId(state.config), ep: state.episode });
-    history.replaceState(null, '', `#${params}`);
   }
 
   // ---------- Playback ----------
@@ -206,7 +450,7 @@
     clearInterval(state.timer);
     state.carry = 0;
     state.timer = setInterval(tick, TICK_MS);
-    $('play-btn').textContent = 'Ⅱ Pause';
+    $('play-btn').replaceChildren(icon('pause'), ' Pause');
     $('status-pill').textContent = 'Playing';
   }
 
@@ -214,7 +458,7 @@
     if (!state.timer) return;
     clearInterval(state.timer);
     state.timer = null;
-    $('play-btn').textContent = '▶ Play';
+    $('play-btn').replaceChildren(icon('play'), ' Play');
     $('status-pill').textContent = 'Paused';
     updateHash();
   }
@@ -236,71 +480,51 @@
     render();
   }
 
-  // ---------- Formatting ----------
-
-  const energy = v => v * ENERGY_UNITS[state.energyUnit];
-  const emissions = v => v * EMISSION_UNITS[state.emissionsUnit];
-  const energyText = v => `${formatValue(energy(v))} ${state.energyUnit}`;
-  const emissionsText = v => `${formatValue(emissions(v))} ${state.emissionsUnit}`;
-
-  function durationText(seconds) {
-    if (!Number.isFinite(seconds)) return '—';
-    if (seconds < 60) return `${formatValue(seconds)} s`;
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.round(seconds % 60);
-    return h ? `${h} h ${String(m).padStart(2, '0')} min` : `${m} min ${String(s).padStart(2, '0')} s`;
-  }
-
-  function gapText(distance) {
-    const opt = instances[state.run.config.instance]?.optimum;
-    if (!opt || !Number.isFinite(distance)) return '—';
-    return `${d3.format('+.1f')(((distance - opt) / opt) * 100)}%`;
-  }
-
-  // ---------- Rendering ----------
+  // ---------- Explore rendering ----------
 
   function render() {
-    if (!state.run) return;
-    renderEpisodeState();
+    if (!state.run || settings.tab !== 'explore') return;
+    const basis = emissionsBasis(state.run);
+    renderEpisodeState(basis);
     renderKpis();
-    renderCharts();
+    renderCharts(basis);
   }
 
-  function renderEpisodeState() {
+  function renderEpisodeState(basis) {
     const { run, episode } = state;
     const i = episode - 1;
     $('episode-range').value = episode;
-    $('episode-input').value = episode;
-    $('episode-number').textContent = `${fmtInt(episode)} / ${fmtInt(run.n)}`;
+    $('episode-input').value = i + run.firstEpisode;
+    $('episode-number').textContent = `Episode ${epLabel(run, i)}`;
     $('progress-bar').style.width = `${(episode / run.n) * 100}%`;
-    $('new-best-badge').hidden = run.minIdx.distance[i] !== i;
+    $('new-best-badge').hidden = run.bestIdx[i] !== i;
 
     const items = [
-      ['Duration', durationText(run.cols.duration[i])],
-      ['CPU energy', energyText(run.cols.cpu_energy[i])],
-      ['RAM energy', energyText(run.cols.ram_energy[i])],
-      ['Total energy', energyText(run.cols.energy_consumed[i])],
-      ['Emissions', emissionsText(run.cols.emissions[i])],
-      ['Distance', formatValue(run.cols.distance[i])],
-      ['Best so far', `${formatValue(run.bestSoFar[i])} (ep ${fmtInt(run.minIdx.distance[i] + 1)})`]
+      ['repeat', 'Episodes shown', `${fmtInt(episode)} of ${fmtInt(run.n)}`],
+      ['timer', 'Duration', durationText(run.cols.duration[i])],
+      ['cpu', 'CPU energy', energyText(run.cols.cpu_energy[i])],
+      ['memory-stick', 'RAM energy', energyText(run.cols.ram_energy[i])],
+      ['zap', 'Total energy', energyText(run.cols.energy_consumed[i])],
+      ['cloud', 'Emissions', emissionsText(basis.perEpisode[i] * basis.factor)],
+      ['route', 'Distance', formatValue(run.cols.distance[i])],
+      ['trophy', 'Best so far', `${formatValue(run.bestSoFar[i])} (ep ${epLabel(run, run.bestIdx[i])})`]
     ];
-    const dl = $('readout');
-    dl.replaceChildren();
-    items.forEach(([label, value]) => {
+    $('readout').replaceChildren(...items.flatMap(([name, label, value]) => {
       const dt = document.createElement('dt');
-      dt.textContent = label;
+      dt.append(icon(name), label);
       const dd = document.createElement('dd');
       dd.textContent = value;
-      dl.append(dt, dd);
-    });
+      return [dt, dd];
+    }));
   }
 
-  function kpi(label, value, sub, highlight) {
+  function kpi(name, label, value, sub, highlight) {
     const card = document.createElement('div');
     card.className = `metric-card${highlight ? ' highlight' : ''}`;
     const l = document.createElement('span');
-    l.textContent = label;
+    l.className = 'metric-label';
+    l.appendChild(icon(name));
+    l.append(label);
     const v = document.createElement('strong');
     v.textContent = value;
     const s = document.createElement('small');
@@ -311,73 +535,296 @@
 
   function renderKpis() {
     const { run, episode } = state;
-    const i = episode - 1, last = run.n - 1;
-    const c = run.cumulative;
-    const ofTotal = (total, fmt) => `of ${fmt(total)} for all ${fmtInt(run.n)} episodes`;
-    $('energy-kpis').replaceChildren(
-      kpi('Elapsed duration', durationText(c.duration[i]), ofTotal(c.duration[last], durationText)),
-      kpi('Total energy', energyText(c.energy_consumed[i]), ofTotal(c.energy_consumed[last], energyText)),
-      kpi('CPU energy', energyText(c.cpu_energy[i]), ofTotal(c.cpu_energy[last], energyText)),
-      kpi('RAM energy', energyText(c.ram_energy[i]), ofTotal(c.ram_energy[last], energyText)),
-      kpi('Emissions', emissionsText(c.emissions[i]), ofTotal(c.emissions[last], emissionsText))
-    );
-
-    const bestIdx = run.minIdx.distance[i];
+    const i = episode - 1;
+    const bestIdx = run.bestIdx[i];
     const inst = instances[run.config.instance];
-    const improvements = d3.bisectRight(run.improvements, i);
     $('perf-kpis').replaceChildren(
-      kpi('Best distance', formatValue(run.bestSoFar[i]), `found at episode ${fmtInt(bestIdx + 1)}`, true),
-      kpi('Gap to optimum', gapText(run.bestSoFar[i]), inst?.optimum ? `known optimum ${fmtInt(inst.optimum)}` : 'optimum unknown'),
-      kpi('Current distance', formatValue(run.cols.distance[i]), `episode ${fmtInt(episode)}`),
-      kpi('Improvements', fmtInt(improvements), 'episodes that set a new best')
+      kpi('trophy', 'Best distance', formatValue(run.bestSoFar[i]), `found at episode ${epLabel(run, bestIdx)}`, true),
+      kpi('target', 'Gap to optimum', gapText(run, run.bestSoFar[i]), inst?.optimum ? `known optimum ${fmtInt(inst.optimum)}` : 'optimum unknown'),
+      kpi('route', 'Current distance', formatValue(run.cols.distance[i]), `episode ${epLabel(run, i)}`),
+      kpi('trending-down', 'Improvements', fmtInt(d3.bisectRight(run.improvements, i)), 'episodes that set a new best')
     );
   }
 
+  // Energy board: elapsed time, CPU/RAM split, then CPU + RAM = E and E × C = CO2eq.
+  // Each value covers the episodes shown so far; the small line gives the whole run's total.
+  function renderFlow(run, episode, basis) {
+    const i = episode - 1, last = run.n - 1;
+    const c = run.cumulative;
+    const total = c.energy_consumed[i];
+    const share = v => (total > 0 ? v / total : 0);
+    const percent = v => d3.format('.0%')(share(v));
+    const tile = (name, label, value, sub, cls = '', flag = null) => {
+      const card = document.createElement('div');
+      card.className = `flow-tile ${cls}`;
+      const head = document.createElement('span');
+      head.className = 'flow-label';
+      head.append(icon(name), label);
+      const v = document.createElement('strong');
+      v.textContent = value;
+      const s = document.createElement('small');
+      if (flag) s.appendChild(flagImg(flag));
+      s.append(sub);
+      card.append(head, v, s);
+      return card;
+    };
+    const op = symbol => {
+      const span = document.createElement('span');
+      span.className = 'flow-op';
+      span.textContent = symbol;
+      span.setAttribute('aria-hidden', 'true');
+      return span;
+    };
+    const ofTotal = (value, fmt) => `of ${fmt(value)} in total`;
+    const emissions = v => `${emissionsText(v * basis.factor)} CO₂eq`;
+    const intensity = Number.isFinite(basis.intensity) ? `${formatValue(basis.intensity)} g/kWh` : 'not recorded';
+
+    $('board-time').replaceChildren(
+      tile('timer', 'Elapsed time', durationText(c.duration[i]), ofTotal(c.duration[last], durationText), 'time'));
+    $('flow').replaceChildren(
+      tile('cpu', 'CPU', energyText(c.cpu_energy[i]), ofTotal(c.cpu_energy[last], energyText), 'cpu'),
+      op('+'),
+      tile('memory-stick', 'RAM', energyText(c.ram_energy[i]), ofTotal(c.ram_energy[last], energyText), 'ram'),
+      op('='),
+      tile('zap', 'Energy E', energyText(total), ofTotal(c.energy_consumed[last], energyText), 'energy'),
+      op('×'),
+      tile('factory', 'Grid C', intensity, basis.label, 'grid', basis.flag),
+      op('='),
+      tile('cloud', 'Emissions', emissions(basis.cumulative[i]), ofTotal(basis.cumulative[last], emissions), 'co2')
+    );
+
+    const { cpu_measurement: cpu, tracking_mode: tracking } = run.measurement;
+    const scope = { machine: 'whole machine', process: 'training process only' };
+    $('flow-caption').textContent = `Episodes ${epLabel(run, 0)}–${epLabel(run, i)}` +
+      (cpu ? ` · CPU via ${cpu}` : '') + (scope[tracking] ? ` · ${scope[tracking]}` : '');
+
+    const bar = document.createElement('div');
+    bar.className = 'share-bar';
+    bar.setAttribute('role', 'img');
+    bar.setAttribute('aria-label', `CPU ${percent(c.cpu_energy[i])}, RAM ${percent(c.ram_energy[i])} of the energy`);
+    [['cpu', c.cpu_energy[i]], ['ram', c.ram_energy[i]]].forEach(([cls, v]) => {
+      const part = document.createElement('span');
+      part.className = cls;
+      part.style.width = `${share(v) * 100}%`;
+      part.textContent = `${cls.toUpperCase()} ${percent(v)}`;
+      bar.appendChild(part);
+    });
+    $('energy-share').replaceChildren(bar);
+  }
+
+  // Lowest, selected and highest grid under the map, plus how far apart the extremes are.
+  function renderCountryFacts(spec) {
+    const ranked = [...spec.opts.countries].sort((a, b) => a.value - b.value);
+    if (!ranked.length) return;
+    const lo = ranked[0], hi = ranked[ranked.length - 1];
+    const sel = ranked.find(c => c.iso === spec.opts.selected);
+    const unit = spec.opts.unit;
+    const fact = (name, title, c) => {
+      const div = document.createElement('div');
+      div.className = 'map-fact';
+      const head = document.createElement('span');
+      head.append(icon(name), title);
+      const body = document.createElement('strong');
+      body.append(flagImg(c.flag), c.name);
+      const sub = document.createElement('small');
+      sub.textContent = `${formatValue(c.value)} ${unit} · ${formatValue(c.intensity)} g/kWh`;
+      div.append(head, body, sub);
+      return div;
+    };
+    const ratio = document.createElement('p');
+    ratio.className = 'map-ratio';
+    ratio.append(icon('info'),
+      `${d3.format(',.0f')(hi.value / lo.value)}× more CO₂eq in ${hi.name} than in ${lo.name}, for the same run.`);
+    $('country-facts').replaceChildren(
+      fact('leaf', 'Cleanest grid', lo),
+      ...(sel ? [fact('map-pin', settings.country === MEASURED ? 'As measured' : 'Your selection', sel)] : []),
+      fact('factory', 'Most carbon-intensive grid', hi),
+      ratio
+    );
+  }
+
+  // Everyday equivalents and the daily projection for the episodes shown so far
+  // (factors and sources: data/equivalents.json).
+  function everydaySpec(run, episode, basis) {
+    const Eq = GreenRLEquivalents;
+    const i = episode - 1;
+    const amounts = { energy: run.cumulative.energy_consumed[i], emissions: basis.cumulative[i] * basis.factor };
+    const item = (eq, amount) => ({ ...Eq.describe(eq, amount), eq, source: Eq.sourceNumber(eq.source), published: eq.published });
+    const groups = [
+      { basis: 'energy', title: `Energy · ${energyText(amounts.energy)}` },
+      { basis: 'emissions', title: `Emissions · ${emissionsText(amounts.emissions)} CO₂eq · ${basis.label}`, flag: basis.flag }
+    ].map(g => ({ ...g, items: Eq.list.filter(eq => eq.basis === g.basis).map(eq => item(eq, amounts[g.basis])) }));
+
+    const days = [1, 30, 365];
+    const eqRow = (id, label) => {
+      const eq = Eq.byId(id);
+      return {
+        label, eq, source: Eq.sourceNumber(eq.source), published: eq.published,
+        cells: days.map(d => {
+          const { value, label: text } = Eq.describe(eq, amounts[eq.basis] * d);
+          return text.startsWith('of one') ? `${value} of one` : value;
+        })
+      };
+    };
+    return {
+      scope: `Episodes ${epLabel(run, 0)}–${epLabel(run, i)} · ${basis.label}`,
+      groups,
+      columns: [
+        { icon: 'play', label: 'This run', times: '×1' },
+        { icon: 'calendar-days', label: '1 month', times: '×30' },
+        { icon: 'calendar-range', label: '1 year', times: '×365' }
+      ],
+      rows: [
+        { label: 'Energy', eq: { icon: 'zap', basis: 'energy' }, cells: days.map(d => energyText(amounts.energy * d)) },
+        eqRow('smartphone', 'Phone charges'),
+        eqRow('electric_car', 'Electric car'),
+        { label: `Emissions · ${basis.label}`, eq: { icon: 'cloud', basis: 'emissions' },
+          cells: days.map(d => `${emissionsText(amounts.emissions * d)} CO₂eq`) },
+        eqRow('petrol_car', 'Petrol car'),
+        eqRow('tree', 'Tree absorbing it')
+      ],
+      sources: Eq.sourceList(),
+      retrieved: Eq.retrieved
+    };
+  }
+
+  function renderEveryday(spec) {
+    const ref = n => {
+      const a = document.createElement('a');
+      a.className = 'eq-ref';
+      a.href = `#eq-src-${n}`;
+      a.textContent = `[${n}]`;
+      return a;
+    };
+    $('eq-scope').textContent = spec.scope;
+    $('eq-cards').replaceChildren(...spec.groups.map(group => {
+      const wrap = document.createElement('div');
+      wrap.className = 'eq-group';
+      const title = document.createElement('h4');
+      if (group.flag) title.appendChild(flagImg(group.flag));
+      title.append(group.title);
+      const grid = document.createElement('div');
+      grid.className = 'eq-grid';
+      grid.append(...group.items.map(it => {
+        const card = document.createElement('div');
+        card.className = `eq-card ${group.basis}`;
+        card.title = `Source value: ${it.published}`;
+        const pic = document.createElement('span');
+        pic.innerHTML = GreenRLEquivalents.iconHtml(it.eq, group.basis);
+        const text = document.createElement('div');
+        const value = document.createElement('strong');
+        value.textContent = it.value;
+        const label = document.createElement('span');
+        label.append(`${it.label} `, ref(it.source));
+        text.append(value, label);
+        card.append(pic.firstElementChild, text);
+        return card;
+      }));
+      wrap.append(title, grid);
+      return wrap;
+    }));
+
+    const head = document.createElement('tr');
+    head.appendChild(document.createElement('th'));
+    spec.columns.forEach(col => {
+      const th = document.createElement('th');
+      const times = document.createElement('span');
+      times.className = 'times';
+      times.textContent = col.times;
+      th.append(icon(col.icon), ` ${col.label} `, times);
+      head.appendChild(th);
+    });
+    const rows = spec.rows.map(row => {
+      const tr = document.createElement('tr');
+      const th = document.createElement('td');
+      const pic = document.createElement('span');
+      pic.innerHTML = GreenRLEquivalents.iconHtml(row.eq);
+      th.append(pic.firstElementChild, row.label);
+      if (row.source) th.append(' ', ref(row.source));
+      tr.appendChild(th);
+      row.cells.forEach(text => {
+        const td = document.createElement('td');
+        td.textContent = text;
+        tr.appendChild(td);
+      });
+      return tr;
+    });
+    const thead = document.createElement('thead');
+    thead.appendChild(head);
+    const tbody = document.createElement('tbody');
+    tbody.append(...rows);
+    $('eq-projection').replaceChildren(thead, tbody);
+
+    $('eq-sources').replaceChildren(...spec.sources.map(src => {
+      const li = document.createElement('li');
+      li.id = `eq-src-${src.n}`;
+      const a = document.createElement('a');
+      a.href = src.url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = src.name;
+      li.append(a, ` (retrieved ${spec.retrieved})`);
+      return li;
+    }));
+  }
+
   // Chart options shared by the page and the report, so both always show the same thing.
-  function chartSpecs(run, episode) {
+  function chartSpecs(run, episode, basis) {
     const cumulative = state.mode === 'cumulative';
     const pick = key => (cumulative ? run.cumulative[key] : run.cols[key]);
     const kind = cumulative ? 'last' : 'band';
     const title = (what, unit) => (cumulative ? `Cumulative ${what.toLowerCase()} (${unit})` : `${what} per episode (${unit})`);
     const i = episode - 1;
-    const bestIdx = run.minIdx.distance[i];
+    const bestIdx = run.bestIdx[i];
     const inst = instances[run.config.instance];
+    const base = run.firstEpisode;
+    const energyKWh = run.cumulative.energy_consumed[i];
+    const emissionsFactor = EMISSION_UNITS[settings.emissionsUnit];
 
     const energySeries = [
       { label: 'Total', color: '--series-1', values: pick('energy_consumed') },
       { label: 'CPU', color: '--series-2', values: pick('cpu_energy') },
       { label: 'RAM', color: '--series-3', values: pick('ram_energy') }
-    ].map(s => ({ ...s, kind, unit: state.energyUnit }));
+    ].map(s => ({ ...s, kind, unit: settings.energyUnit }));
 
     return {
       energy: {
-        title: title('Energy', state.energyUnit),
+        title: title('Energy', settings.energyUnit),
         caption: cumulative
-          ? 'Energy used from episode 1 up to each episode.'
-          : 'Line = energy of each episode; the shaded band shows the lowest and highest episode within each plotted step.',
+          ? 'Running total.'
+          : 'Line = mean · band = min–max.',
         legend: energySeries,
-        opts: { end: episode, series: energySeries, scale: ENERGY_UNITS[state.energyUnit], zeroBased: true, height: 260,
+        opts: { end: episode, base, series: energySeries, scale: ENERGY_UNITS[settings.energyUnit], zeroBased: true, height: 260,
           ariaLabel: 'Energy per episode: total, CPU and RAM' }
       },
       emissions: {
-        title: title('Emissions', `${state.emissionsUnit} CO₂eq`),
-        opts: { end: episode, scale: EMISSION_UNITS[state.emissionsUnit], zeroBased: true, ariaLabel: 'Emissions per episode',
-          series: [{ label: 'Emissions', color: '--series-1', values: pick('emissions'), kind, unit: state.emissionsUnit, endLabel: true }] }
+        title: title('Emissions', `${settings.emissionsUnit} CO₂eq`),
+        caption: gridText(basis),
+        opts: { end: episode, base, scale: basis.factor * emissionsFactor, zeroBased: true, ariaLabel: 'Emissions per episode',
+          series: [{ label: 'Emissions', color: '--series-1', kind, unit: settings.emissionsUnit, endLabel: true,
+            values: cumulative ? basis.cumulative : basis.perEpisode }] }
       },
       duration: {
         title: title('Duration', 's'),
-        opts: { end: episode, zeroBased: true, ariaLabel: 'Duration per episode',
+        opts: { end: episode, base, zeroBased: true, ariaLabel: 'Duration per episode',
           series: [{ label: 'Duration', color: '--series-1', values: pick('duration'), kind, unit: 's', endLabel: true }] }
       },
+      country: {
+        caption: `The same energy (${energyText(energyKWh)}) on each country's grid. Click a country to select it.`,
+        opts: {
+          unit: `${settings.emissionsUnit} CO₂eq`, selected: basis.iso, ariaLabel: 'Map of the emissions of this run in every country',
+          countries: countries.map(c => ({ ...c, value: energyKWh * c.intensity / 1000 * emissionsFactor })),
+          perIntensity: energyKWh / 1000 * emissionsFactor
+        }
+      },
       distance: {
-        caption: 'Blue: tour length found in each episode. Orange: best (shortest) length found so far.' +
-          (inst?.optimum ? ' Grey line: known optimum.' : ''),
+        caption: inst?.optimum ? 'Grey line = known optimum.' : '',
         legend: [
           { label: 'Episode distance', color: '--series-1' },
           { label: 'Best so far', color: '--series-2' }
         ],
         opts: {
-          end: episode, height: 380, ariaLabel: 'Distance per episode with best distance so far',
+          end: episode, base, height: 380, ariaLabel: 'Distance per episode with best distance so far',
           series: [
             { label: 'Episode distance', color: '--series-1', values: run.cols.distance, kind: 'band' },
             { label: 'Best so far', color: '--series-2', values: run.bestSoFar, kind: 'last', curve: 'step' }
@@ -385,26 +832,29 @@
           refLine: inst?.optimum ? { value: inst.optimum, label: `optimum ${fmtInt(inst.optimum)}` } : null,
           marker: bestIdx >= 0 ? {
             episode: bestIdx + 1, value: run.cols.distance[bestIdx], color: '--series-2',
-            label: `best ${formatValue(run.cols.distance[bestIdx])} · ep ${fmtInt(bestIdx + 1)}`
+            label: `best ${formatValue(run.cols.distance[bestIdx])} · ep ${epLabel(run, bestIdx)}`
           } : null
         }
       },
+      everyday: everydaySpec(run, episode, basis),
       routeCaption: inst && !inst.coords
-        ? `${run.config.instance} is asymmetric (ATSP) and has no coordinates: nodes sit on a circle in index order.`
-        : `${run.config.instance}: TSPLIB node coordinates.`
+        ? `${run.config.instance} (ATSP): nodes on a circle.`
+        : `${run.config.instance}: TSPLIB coordinates.`
     };
   }
 
-  function renderCharts() {
+  function renderCharts(basis) {
     const { run, episode } = state;
-    const specs = chartSpecs(run, episode);
+    const specs = chartSpecs(run, episode, basis);
     const i = episode - 1;
-    const bestIdx = run.minIdx.distance[i];
+    const bestIdx = run.bestIdx[i];
 
     $('energy-title').textContent = specs.energy.title;
     $('energy-caption').textContent = specs.energy.caption;
     $('emissions-title').textContent = specs.emissions.title;
+    $('emissions-caption').textContent = specs.emissions.caption;
     $('duration-title').textContent = specs.duration.title;
+    $('country-caption').textContent = specs.country.caption;
     $('distance-caption').textContent = specs.distance.caption;
     $('route-caption').textContent = specs.routeCaption;
 
@@ -412,16 +862,23 @@
     GreenRLCharts.timeSeries($('energy-chart'), specs.energy.opts);
     GreenRLCharts.timeSeries($('emissions-chart'), specs.emissions.opts);
     GreenRLCharts.timeSeries($('duration-chart'), specs.duration.opts);
+    GreenRLCharts.countryMap($('country-chart'), {
+      ...specs.country.opts, onSelect: iso => { settings.country = iso; onSettingsChange(); }
+    });
+    renderCountryFacts(specs.country);
+    renderFlow(run, episode, basis);
+    renderEveryday(specs.everyday);
     GreenRLCharts.legend('#distance-legend', specs.distance.legend);
     GreenRLCharts.timeSeries($('distance-chart'), specs.distance.opts);
 
+    if (!run.hasPaths) return;
     GreenRLCharts.legend('#route-legend', [
-      { label: `Episode ${fmtInt(episode)}`, color: '--series-1' },
-      ...(state.showBest ? [{ label: `Best (ep ${fmtInt(bestIdx + 1)})`, color: '--series-2', shape: 'wide' }] : [])
+      { label: `Episode ${epLabel(run, i)}`, color: '--series-1' },
+      ...(state.showBest ? [{ label: `Best (ep ${epLabel(run, bestIdx)})`, color: '--series-2', shape: 'wide' }] : [])
     ]);
     GreenRLCharts.routeChart($('route-chart'), {
       instance: instances[run.config.instance], current: run.path(i), best: bestIdx >= 0 ? run.path(bestIdx) : null,
-      showBest: state.showBest, height: 380, ariaLabel: `Path of episode ${episode}`
+      showBest: state.showBest, height: 380, ariaLabel: `Path of episode ${epLabel(run, i)}`
     });
   }
 
@@ -430,35 +887,51 @@
   function openReportDialog() {
     if (!state.run) return;
     pause();
-    const config = state.run.config;
+    const { run } = state;
+    const basis = emissionsBasis(run);
+    const pathOption = $('report-path-option');
+    pathOption.hidden = !run.hasPaths;
+    pathOption.querySelector('input').checked = run.hasPaths;
     $('report-scope').textContent =
-      `${displayValue(PARAMS[0], config.algorithm)} on ${config.instance}, episodes 1–${fmtInt(state.episode)} ` +
-      `of ${fmtInt(state.run.n)}, ${state.mode === 'cumulative' ? 'cumulative' : 'per-episode'} charts, ` +
-      `energy in ${state.energyUnit}, emissions in ${state.emissionsUnit} CO₂eq.`;
+      `${displayValue(PARAMS[0], run.config.algorithm)} · ${run.config.instance} · seed ${run.config.seed} · ` +
+      `episodes ${epLabel(run, 0)}–${epLabel(run, state.episode - 1)} · ${basis.label}`;
     $('report-dialog').showModal();
   }
 
   function exportReport(format) {
-    const sections = new Set([...document.querySelectorAll('#report-dialog input[name="section"]:checked')].map(i => i.value));
+    const run = state.run;
+    const basis = emissionsBasis(run);
+    const sections = new Set([...document.querySelectorAll('#report-dialog input[name="section"]:checked')]
+      .filter(input => !input.closest('[hidden]')).map(input => input.value));
     const html = GreenRLReport.build({
-      run: state.run, episode: state.episode, sections, instance: instances[state.run.config.instance],
-      specs: chartSpecs(state.run, state.episode), params: PARAMS, displayValue,
-      units: { energy: state.energyUnit, energyFactor: ENERGY_UNITS[state.energyUnit],
-        emissions: state.emissionsUnit, emissionsFactor: EMISSION_UNITS[state.emissionsUnit] },
-      mode: state.mode, durationText, gapText
+      run, episode: state.episode, sections, instance: instances[run.config.instance],
+      specs: chartSpecs(run, state.episode, basis), params: PARAMS, displayValue, basis,
+      gridText: gridText(basis), epLabel: index => epLabel(run, index),
+      units: { energy: settings.energyUnit, energyFactor: ENERGY_UNITS[settings.energyUnit],
+        emissions: settings.emissionsUnit, emissionsFactor: EMISSION_UNITS[settings.emissionsUnit] },
+      mode: state.mode, durationText, gapText: d => gapText(run, d)
     });
     $('report-dialog').close();
-    const name = `report_${state.run.id}_ep${state.episode}`;
+    const name = `report_${run.id}_ep${epLabel(run, state.episode - 1).replace(/,/g, '')}`;
     if (format === 'html') GreenRLReport.download(html, `${name}.html`);
     else GreenRLReport.print(html, name);
   }
 
   // ---------- Start ----------
 
+  GreenRLIcons.hydrate();
   state.config = initialConfig();
-  buildConfigForm();
   buildControls();
-  $('dataset-count').textContent = `${fmtInt(manifest.runs.length)} run(s) in the dataset. ∅ marks options with no run for the other selected values.`;
-  syncConfigForm();
+  GreenRLCompare.init({
+    PARAMS, displayValue, valueKey, runId, available, instances, settings,
+    ENERGY_UNITS, EMISSION_UNITS, fmtInt, formatValue,
+    energyText, emissionsText, durationText, gapText, epLabel, measuredCountry, emissionsBasis,
+    configForm, nearestRuns, updateHash, updateGridSettings
+  }, parseRunId(hash.get('a')), parseRunId(hash.get('b')));
+  $('dataset-count').textContent = `${fmtInt(manifest.runs.length)} runs · ∅ = no run`;
+  syncExploreForm();
+  $('run-id').textContent = runId(state.config);
+  updateGridSettings();
   load();
+  if (['compare', 'concepts'].includes(hash.get('tab'))) showTab(hash.get('tab'));
 })();
