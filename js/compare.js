@@ -2,7 +2,7 @@
 // 2D line charts. Shared helpers and settings come from main.js through init().
 window.GreenRLCompare = (() => {
   const $ = id => document.getElementById(id);
-  const cmp = { a: null, b: null, runA: null, runB: null, upTo: null, token: 0 };
+  const cmp = { a: null, b: null, runA: null, runB: null, upTo: null, token: 0, scoreToken: 0 };
   let app = null;
   let syncA, syncB;
 
@@ -14,6 +14,12 @@ window.GreenRLCompare = (() => {
     syncB = app.configForm($('cmp-b-form'), 'cmp-b', () => cmp.b, onConfigChange);
     $('cmp-range').addEventListener('input', e => { cmp.upTo = Number(e.target.value); render(); });
     $('cmp-all').addEventListener('click', () => { cmp.upTo = null; render(); });
+    $('cmp-weight').appendChild(GreenRLScores.view.weightControl(renderScores));
+    $('cmp-greenest').addEventListener('click', () => {
+      if (!cmp.greenest) return;
+      cmp.b = { ...cmp.greenest };
+      onConfigChange();
+    });
   }
 
   // First visit: A = the run open in the Explore tab, B = the closest other run.
@@ -159,6 +165,7 @@ window.GreenRLCompare = (() => {
     $('cmp-range-label').textContent = `${app.fmtInt(p)} / ${app.fmtInt(max)} episodes`;
 
     renderTable(p);
+    renderScores();
 
     const labelA = `A · ${differences(runA.config, runB.config)}`;
     const labelB = `B · ${differences(runB.config, runA.config)}`;
@@ -200,6 +207,91 @@ window.GreenRLCompare = (() => {
         kind: 'last', unit: emissionsUnit, a: { scale: basisA.factor }, b: { scale: basisB.factor }
       })
     });
+  }
+
+  // ECOVIS score of both runs, a verdict, and the energy of each algorithm with A's settings.
+  function renderScores() {
+    const { runA, runB } = cmp;
+    if (!runA || !runB) return;
+    const S = GreenRLScores;
+    const token = ++cmp.scoreToken;
+    Promise.all([S.load(runA.config.instance), S.load(runB.config.instance)]).then(([tableA, tableB]) => {
+      if (token !== cmp.scoreToken) return;
+      const a = S.scoreOf(tableA, runA.config), b = S.scoreOf(tableB, runB.config);
+      if (!a || !b) return;
+      const algo = c => app.displayValue(app.PARAMS[0], c.algorithm);
+      $('cmp-scores').replaceChildren(
+        S.view.card(a, { title: `Run A · ${algo(runA.config)}`, keyColor: 'var(--series-1)', instance: runA.config.instance }),
+        S.view.card(b, { title: `Run B · ${algo(runB.config)}`, keyColor: 'var(--series-2)', instance: runB.config.instance })
+      );
+      renderVerdict(a, b);
+
+      // Greenest run on A's instance (with the current weighting), other than A itself.
+      const idA = app.runId(runA.config);
+      const greenest = S.top(tableA, c => app.runId(c) !== idA);
+      cmp.greenest = greenest && greenest.config;
+      $('cmp-greenest').hidden = !greenest || app.runId(greenest.config) === app.runId(runB.config);
+      if (greenest) {
+        $('cmp-greenest-label').textContent = `Compare A with the greenest run on ${runA.config.instance} ` +
+          `(${algo(greenest.config)}, score ${S.points(greenest.score)})`;
+      }
+
+      const inst = app.instances[runA.config.instance];
+      const idB = app.runId(runB.config);
+      const rows = app.PARAMS[0].values.map(algorithm => {
+        const config = { ...runA.config, algorithm };
+        const s = S.scoreOf(tableA, config);
+        if (!s) return null;
+        const id = app.runId(config);
+        return {
+          name: `${algo(config)}${id === idA ? ' · A' : ''}${id === idB ? ' · B' : ''}`,
+          energy: s.energy, energyGrade: s.energyGrade, energyText: app.energyText(s.energy),
+          tour: inst?.optimum ? `gap ${app.gapText(runA, s.best)}` : `best ${app.fmtInt(s.best)}`,
+          current: id === idA || id === idB,
+          onClick: id === idA ? null : () => { cmp.b = config; onConfigChange(); }
+        };
+      }).filter(Boolean);
+      $('cmp-algos-caption').textContent = `Total energy of each algorithm with run A's other settings on ${runA.config.instance}. ` +
+        'Letters are energy labels (A = the fifth of runs with the lowest energy). Click a bar to compare it as run B.';
+      $('cmp-algos').replaceChildren(S.view.algorithmBars(rows));
+    }).catch(() => {});
+  }
+
+  function renderVerdict(a, b) {
+    const { runA, runB } = cmp;
+    const box = $('cmp-verdict');
+    const same = runA.config.instance === runB.config.instance;
+    const percent = v => `${Math.round(Math.abs(v) * 100)}%`;
+    const strong = text => { const s = document.createElement('strong'); s.textContent = text; return s; };
+    const parts = [];
+    let tone = 'trade';
+    if (!same) {
+      parts.push('A and B are on different instances, so each score ranks its run on its own instance.');
+    } else {
+      const dE = (b.energy - a.energy) / a.energy, dT = (b.best - a.best) / a.best;
+      const [win, lose, winE, winT] = b.score >= a.score ? ['B', 'A', -dE, -dT] : ['A', 'B', dE, dT];
+      if (winE > 0 && winT > 0) {
+        tone = 'win';
+        parts.push(strong(`${win} is the greener choice`), `: it uses ${percent(winE)} less energy and finds a ${percent(winT)} shorter tour than ${lose}.`);
+      } else if (Math.abs(a.score - b.score) < 0.005) {
+        parts.push(strong('A tie'), ': both runs score the same with this weighting.');
+      } else {
+        parts.push(strong(`Trade-off, ${win} scores higher`), winE > 0
+          ? `: it uses ${percent(winE)} less energy, but its tour is ${percent(winT)} longer.`
+          : `: its tour is ${percent(winT)} shorter, but it uses ${percent(winE)} more energy.`);
+      }
+      // What the energy difference adds up to when the run is repeated every day for a year.
+      const saving = Math.abs(a.energy - b.energy) * 365;
+      const lower = a.energy < b.energy ? 'A' : 'B';
+      const phone = GreenRLEquivalents.byId('smartphone');
+      if (saving > 0 && phone) {
+        const { value, label } = GreenRLEquivalents.describe(phone, saving);
+        parts.push(` Run once a day for a year, choosing ${lower} saves ${app.energyText(saving)} (${value} ${label}).`);
+      }
+    }
+    box.className = `verdict ${tone}`;
+    box.replaceChildren(GreenRLIcons.el(tone === 'win' ? 'leaf' : 'scale'), Object.assign(document.createElement('p'), {}));
+    box.lastChild.append(...parts);
   }
 
   function hashParams() {

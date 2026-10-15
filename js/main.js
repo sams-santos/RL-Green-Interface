@@ -5,13 +5,19 @@
   const { formatValue, flagUrl } = GreenRLCharts;
   const { instances = {}, countries = [] } = window.GREEN_RL_REFERENCE || {};
   const countryByIso = Object.fromEntries(countries.map(c => [c.iso, c]));
-  const manifest = window.GREEN_RL_MANIFEST || { runs: [] };
-  const available = new Set(manifest.runs);
-  GreenRLConfig.extendWithDataset(manifest.runs);
+  const { manifest } = GreenRL;
+  // Same interface as a Set of run ids: available.has(runId).
+  const available = { has: id => GreenRL.available(parseRunId(id)) };
 
   const ENERGY_UNITS = { kWh: 1, Wh: 1e3, J: 3.6e6 };
   const EMISSION_UNITS = { kg: 1, g: 1e3, mg: 1e6 };
-  const SPEEDS = [10, 50, 100, 250, 500, 1000, 2500];
+  // Title and icon of each view, shown in the page title bar.
+  const PAGES = {
+    explore: ['Explore a run', 'compass'],
+    compare: ['Compare two runs', 'git-compare'],
+    concepts: ['Concepts & references', 'book-open-text']
+  };
+  const SPEEDS = [5, 10, 25, 50, 100, 250, 500];
   const TICK_MS = 100;
   const MEASURED = 'measured';
 
@@ -34,9 +40,9 @@
     episode: 1,          // position 1..n (episodes shown so far)
     timer: null,
     carry: 0,
-    speed: 250,
+    speed: 50,
     mode: 'episode',
-    showBest: true,
+    insight: 'run',
     loadToken: 0
   };
 
@@ -120,11 +126,14 @@
     };
   }
 
-  // Runs in the dataset ordered by how many parameters differ from `config`.
+  // Runs in the dataset that differ from `config` in one parameter, in PARAMS order.
   function nearestRuns(config) {
-    return manifest.runs.map(parseRunId).filter(Boolean).map(c => ({
-      config: c, diffs: PARAMS.filter(p => valueKey(p, c[p.key]) !== valueKey(p, config[p.key]))
-    })).sort((a, b) => a.diffs.length - b.diffs.length);
+    const out = [];
+    PARAMS.forEach(p => p.values.forEach(value => {
+      const c = { ...config, [p.key]: value };
+      if (valueKey(p, value) !== valueKey(p, config[p.key]) && available.has(runId(c))) out.push({ config: c, diffs: [p] });
+    }));
+    return out;
   }
 
   // ---------- Country picker (with flags) ----------
@@ -254,8 +263,10 @@
       if (ep > 0) state.episode = ep;
       return fromHash;
     }
-    if (manifest.runs.length) return parseRunId(manifest.runs[0]);
-    return Object.fromEntries(PARAMS.map(p => [p.key, p.values[0]]));
+    // Default: a mid-grid Q-learning run on berlin52 (or the first value of each parameter).
+    const preferred = { algorithm: 'q-learning', instance: 'berlin52', epsilon_decay: 'linear', reward: 'R1',
+      gamma: 0.9, alpha: 0.15, epsilon_init: 0.1, seed: 42 };
+    return Object.fromEntries(PARAMS.map(p => [p.key, p.values.includes(preferred[p.key]) ? preferred[p.key] : p.values[0]]));
   }
 
   let syncExploreForm;
@@ -276,7 +287,7 @@
     $('energy-unit').addEventListener('change', e => { settings.energyUnit = e.target.value; onSettingsChange(); });
     $('emissions-unit').addEventListener('change', e => { settings.emissionsUnit = e.target.value; onSettingsChange(); });
 
-    document.querySelectorAll('.tabs [role="tab"]').forEach(tab => {
+    document.querySelectorAll('.nav-list [role="tab"]').forEach(tab => {
       tab.addEventListener('click', () => showTab(tab.dataset.tab));
     });
 
@@ -297,7 +308,6 @@
       pause();
       if (state.run) seek(Number(e.target.value) - state.run.firstEpisode + 1);
     });
-    $('show-best').addEventListener('change', e => { state.showBest = e.target.checked; render(); });
 
     // In-page links (contents, citations, sources) scroll without touching the URL, which holds the view.
     document.addEventListener('click', e => {
@@ -305,10 +315,22 @@
       const target = link && document.getElementById(link.getAttribute('href').slice(1));
       if (!target) return;
       e.preventDefault();
+      const panel = target.closest('[role="tabpanel"][hidden]');
+      if (panel) showTab(panel.id.replace('tab-', ''));
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
       target.classList.remove('flash');
       void target.offsetWidth;
       target.classList.add('flash');
+    });
+
+    $('explore-weight').appendChild(GreenRLScores.view.weightControl(() => { state.overviewKey = null; renderOverview(); }));
+
+    document.querySelectorAll('.insight-tabs button').forEach(button => {
+      button.addEventListener('click', () => {
+        state.insight = button.dataset.insight;
+        state.overviewKey = null;
+        renderOverview();
+      });
     });
 
     $('report-btn').addEventListener('click', openReportDialog);
@@ -333,8 +355,12 @@
   function showTab(tab) {
     settings.tab = tab;
     pause();
-    document.querySelectorAll('.tabs [role="tab"]').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === tab)));
+    document.querySelectorAll('.nav-list [role="tab"]').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === tab)));
     ['explore', 'compare', 'concepts'].forEach(name => { $(`tab-${name}`).hidden = name !== tab; });
+    const [title, iconName] = PAGES[tab];
+    $('page-title').textContent = title;
+    $('page-icon').replaceChildren(icon(iconName));
+    $('status-pill').hidden = tab === 'concepts';
     // The grid and unit controls live in the configuration panel of the open tab.
     if (tab !== 'concepts') $(`${tab}-settings-slot`).appendChild($('grid-settings'));
     if (tab === 'compare') GreenRLCompare.show(state.config);
@@ -393,9 +419,12 @@
     }
     $('status-pill').textContent = 'Loading…';
     $('dashboard').classList.add('is-loading');
-    GreenRL.loadRun(id).then(run => {
+    Promise.all([GreenRL.loadRun(id), GreenRL.loadShard(state.config)]).then(([run, shard]) => {
       if (token !== state.loadToken) return;
       state.run = run;
+      state.shard = shard;
+      state.gridKey = null;
+      state.overviewKey = null;
       state.episode = Math.min(Math.max(1, state.episode), run.n);
       $('empty-state').hidden = true;
       $('dashboard').hidden = false;
@@ -405,8 +434,6 @@
       $('episode-input').min = run.firstEpisode;
       $('episode-input').max = run.firstEpisode + run.n - 1;
       $('episode-max').textContent = fmtInt(run.firstEpisode + run.n - 1);
-      $('path-panel').hidden = !run.hasPaths;
-      document.querySelector('.perf-grid').classList.toggle('single', !run.hasPaths);
       $('status-pill').textContent = 'Paused';
       updateGridSettings();
       render();
@@ -425,9 +452,9 @@
     $('status-pill').textContent = 'No data';
     $('empty-title').textContent = errorMessage ? 'Could not load this run' : 'No results for this configuration';
     $('empty-text').textContent = errorMessage ||
-      (manifest.runs.length
+      (manifest.shards.length
         ? 'The dataset does not contain this combination of parameters. Closest runs that do exist:'
-        : 'The dataset is empty. Generate data/manifest.js and data/runs/ with tools/build_dataset.py.');
+        : 'The dataset is empty. Generate it with tools/fetch_release.py and tools/build_dataset.py.');
 
     const box = $('nearest-runs');
     box.replaceChildren();
@@ -488,6 +515,8 @@
     renderEpisodeState(basis);
     renderKpis();
     renderCharts(basis);
+    renderGrid();
+    renderOverview();
   }
 
   function renderEpisodeState(basis) {
@@ -596,7 +625,8 @@
     const { cpu_measurement: cpu, tracking_mode: tracking } = run.measurement;
     const scope = { machine: 'whole machine', process: 'training process only' };
     $('flow-caption').textContent = `Episodes ${epLabel(run, 0)}–${epLabel(run, i)}` +
-      (cpu ? ` · CPU via ${cpu}` : '') + (scope[tracking] ? ` · ${scope[tracking]}` : '');
+      (cpu ? ` · CPU via ${cpu}` : '') + (scope[tracking] ? ` · ${scope[tracking]}` : '') +
+      ` · average power CPU ${formatValue(run.summary.cpuPower)} W, RAM ${formatValue(run.summary.ramPower)} W`;
 
     const bar = document.createElement('div');
     bar.className = 'share-bar';
@@ -610,6 +640,193 @@
       bar.appendChild(part);
     });
     $('energy-share').replaceChildren(bar);
+  }
+
+  // Run chips, ECOVIS score and the insights card. None of them depends on the
+  // episode, so they are rebuilt only when the run, a unit or the insight tab changes.
+  function renderOverview() {
+    const { run, shard } = state;
+    const key = [run.id, settings.energyUnit, settings.emissionsUnit, settings.country, state.insight, GreenRLScores.weight].join('|');
+    if (key === state.overviewKey) return;
+    state.overviewKey = key;
+    const param = k => PARAMS.find(p => p.key === k);
+    const show = k => displayValue(param(k), run.config[k]);
+    const inst = instances[run.config.instance];
+
+    const chip = (name, label, value) => {
+      const el = document.createElement('div');
+      el.className = 'chip';
+      const text = document.createElement('div');
+      const small = document.createElement('small');
+      small.textContent = label;
+      const strong = document.createElement('strong');
+      strong.textContent = value;
+      text.append(small, strong);
+      el.append(text, icon(name));
+      return el;
+    };
+    $('run-chips').replaceChildren(
+      chip('bot', 'Algorithm', show('algorithm')),
+      chip('route', inst ? `Instance · ${inst.dimension} cities` : 'Instance', run.config.instance),
+      chip('target', 'Reward', show('reward')),
+      chip('trending-down', 'Epsilon decay', show('epsilon_decay')),
+      chip('compass', 'Initial ε₀', show('epsilon_init')),
+      chip('sliders-horizontal', 'Alpha α', show('alpha')),
+      chip('hourglass', 'Gamma γ', show('gamma'))
+    );
+
+    document.querySelectorAll('.insight-tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.insight === state.insight)));
+    $('insight-body').replaceChildren(...insightContent(state.insight, run, shard, inst));
+    renderScore(run, inst);
+  }
+
+  // ECOVIS score of the open run and the energy of each algorithm with the same settings.
+  function renderScore(run, inst) {
+    const S = GreenRLScores;
+    const token = state.scoreToken = (state.scoreToken || 0) + 1;
+    S.load(run.config.instance).then(table => {
+      if (token !== state.scoreToken) return;
+      const s = S.scoreOf(table, run.config);
+      if (!s) return;
+      $('explore-score').replaceChildren(S.view.card(s, { instance: run.config.instance, compact: true }));
+      const algo = c => displayValue(PARAMS[0], c.algorithm);
+      const rows = PARAMS[0].values.map(algorithm => {
+        const config = { ...run.config, algorithm };
+        const r = S.scoreOf(table, config);
+        if (!r) return null;
+        return {
+          name: algo(config), energy: r.energy, energyGrade: r.energyGrade, energyText: energyText(r.energy),
+          tour: inst?.optimum ? `gap ${gapText(run, r.best)}` : `best ${fmtInt(r.best)}`,
+          current: algorithm === run.config.algorithm,
+          onClick: algorithm === run.config.algorithm ? null : () => { state.config = config; onConfigChange(); }
+        };
+      }).filter(Boolean);
+      $('algos-caption').textContent = 'Total energy of each algorithm with the same settings. ' +
+        'Letters are energy labels: ratings of the energy index on this instance, A = the fifth of runs with the lowest energy. Click a bar to open that run.';
+      $('algos').replaceChildren(S.view.algorithmBars(rows));
+    }).catch(err => { $('explore-score').textContent = err.message; });
+  }
+
+  // Short, data-driven notes. Numbers come from the summary files of this shard (64 runs).
+  function insightContent(kind, run, shard, inst) {
+    const html = text => {
+      const p = document.createElement('p');
+      p.innerHTML = text;
+      return p;
+    };
+    const list = items => {
+      const ul = document.createElement('ul');
+      items.forEach(text => { const li = document.createElement('li'); li.innerHTML = text; ul.appendChild(li); });
+      return ul;
+    };
+    const esc = v => String(v).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const s = run.summary, cfg = run.config;
+    const param = k => PARAMS.find(p => p.key === k);
+    const name = displayValue(param('algorithm'), cfg.algorithm);
+    const gap = d => (inst?.optimum ? ((d - inst.optimum) / inst.optimum) * 100 : NaN);
+    const gapStr = d => (inst?.optimum ? `${d3.format('+.1f')(gap(d))}%` : fmtInt(d));
+    const ab = c => `α = ${Number(c.alpha).toFixed(2)}, γ = ${Number(c.gamma).toFixed(2)}`;
+
+    if (kind === 'run') {
+      const cells = shard.cells;
+      const rank = (value, pick) => 1 + cells.filter(c => pick(c.summary) < value).length;
+      const bestGap = cells.reduce((a, c) => (c.summary.best < a.summary.best ? c : a));
+      const cheapest = cells.reduce((a, c) => (c.summary.energy < a.summary.energy ? c : a));
+      const better = cells.filter(c => c.summary.best < s.best && c.summary.energy < s.energy);
+      const toBest = run.cumulative.energy_consumed[s.bestEpisode];
+      return [
+        html(`Over all ${fmtInt(run.n)} episodes, the shortest tour is <strong>${fmtInt(s.best)}</strong>` +
+          (inst?.optimum ? ` (<strong>${gapStr(s.best)}</strong> from the optimum ${fmtInt(inst.optimum)})` : '') +
+          `, found at episode ${fmtInt(s.bestEpisode)} after ${esc(energyText(toBest))} (${d3.format('.0%')(toBest / s.energy)} of the run's energy).`),
+        list([
+          `Among the ${cells.length} α × γ runs with these settings it ranks <strong>#${rank(s.best, x => x.best)}</strong> for distance and <strong>#${rank(s.energy, x => x.energy)}</strong> for energy (1 = best).`,
+          `Shortest tour: ${ab(bestGap)}, ${fmtInt(bestGap.summary.best)}${inst?.optimum ? ` (${gapStr(bestGap.summary.best)})` : ''}.`,
+          `Least energy: ${ab(cheapest)}, ${esc(energyText(cheapest.summary.energy))}.`,
+          better.length
+            ? `${better.length} run${better.length > 1 ? 's' : ''} found a shorter tour <em>and</em> used less energy, e.g. ${ab(better[0])}.`
+            : 'No other run with these settings found a shorter tour while using less energy.'
+        ])
+      ];
+    }
+    if (kind === 'algorithm') {
+      const text = {
+        'q-learning': 'Q-learning updates its Q-table towards the <strong>best</strong> next action, whatever it actually does next (off-policy).',
+        'sarsa': 'SARSA updates its Q-table towards the action it <strong>really takes</strong> next, exploration included (on-policy).',
+        'double-qlearning': 'Double Q-learning keeps <strong>two</strong> Q-tables: one picks the next action and the other values it, which reduces the overestimation of Q-learning.'
+      }[cfg.algorithm] || '';
+      return [
+        html(`<strong>${esc(name)}</strong>. ${text}`),
+        list([
+          `α = ${Number(cfg.alpha).toFixed(2)}: how far each update moves the Q-value.`,
+          `γ = ${Number(cfg.gamma).toFixed(2)}: how much the rest of the tour counts.`,
+          'Formulas and references: <a href="#c-rl">Concepts &amp; references</a>.'
+        ])
+      ];
+    }
+    if (kind === 'instance') {
+      return [
+        html(`<strong>${esc(cfg.instance)}</strong> is ${inst?.type === 'ATSP' ? 'an <strong>asymmetric</strong> TSP (going i → j can cost more or less than j → i)' : 'a <strong>symmetric</strong> TSP'} from TSPLIB with ${inst ? fmtInt(inst.dimension) : '?'} cities.`),
+        list([
+          `Each episode builds one complete tour through all ${inst ? fmtInt(inst.dimension) : ''} cities.`,
+          inst?.optimum ? `Best known tour: ${fmtInt(inst.optimum)}. The gap to optimum measures how far a tour is from it.` : 'No known optimum is listed for this instance.',
+          inst?.type === 'ATSP' ? 'Its distances come from a full matrix.' : 'Its distances come from city coordinates.'
+        ])
+      ];
+    }
+    const eps = run.cols.epsilon;
+    const constant = eps.length && eps.every(v => v === eps[0]);
+    const describe = {
+      linear: 'falls at a constant rate',
+      concave: 'falls quickly at first, then more slowly',
+      convex: 'stays near ε₀ for a long time, then drops near the end',
+      fixed: 'never changes',
+      step: 'is meant to fall in steps'
+    }[cfg.epsilon_decay] || '';
+    return [
+      html(`With <strong>${esc(cfg.epsilon_decay)}</strong> decay, ε ${describe}: from <strong>${eps[0] ?? cfg.epsilon_init}</strong> to <strong>${formatValue(eps[eps.length - 1])}</strong> at episode ${fmtInt(run.n - 1)}.`),
+      list([
+        'With probability ε the agent picks a random city; otherwise it takes the best one in its Q-table.',
+        constant && cfg.epsilon_decay === 'step'
+          ? 'In this dataset no step happens within 1,000 episodes, so these runs behave like <em>fixed</em>.'
+          : 'Details of each schedule: <a href="#c-settings">Concepts &amp; references</a>.'
+      ])
+    ];
+  }
+
+  // Every alpha x gamma run that shares the other settings, from the summary files. The grid
+  // does not depend on the episode, so it is redrawn only when the run, unit or width changes.
+  function renderGrid() {
+    const { run, shard } = state;
+    if (!shard) return;
+    const key = [run.id, settings.energyUnit, $('grid-gap').clientWidth].join('|');
+    if (key === state.gridKey) return;
+    state.gridKey = key;
+    const param = k => PARAMS.find(p => p.key === k);
+    const inst = instances[run.config.instance];
+    const cellOf = (g, a) => shard.cells.find(c => Math.abs(c.gamma - g) < 1e-9 && Math.abs(c.alpha - a) < 1e-9);
+    const metric = fn => (g, a) => { const c = cellOf(g, a); return c ? fn(c.summary) : NaN; };
+    const short = v => (Math.abs(v) >= 0.01 && Math.abs(v) < 1e4 ? d3.format('.3~r')(v) : d3.format('.1e')(v));
+    const label = v => Number(v).toFixed(2);
+    const common = {
+      rows: param('gamma').values, cols: param('alpha').values, rowLabel: label, colLabel: label,
+      selected: { row: run.config.gamma, col: run.config.alpha },
+      onSelect: (gamma, alpha) => { state.config = { ...state.config, gamma, alpha }; onConfigChange(); }
+    };
+    GreenRLCharts.gridHeatmap($('grid-gap'), {
+      ...common, ariaLabel: 'Gap to optimum for every alpha and gamma',
+      unit: inst?.optimum ? 'gap to optimum' : 'best distance',
+      value: metric(s => (inst?.optimum ? ((s.best - inst.optimum) / inst.optimum) * 100 : s.best)),
+      format: (v, compact) => (!Number.isFinite(v) ? '—' : inst?.optimum ? `${d3.format(compact ? '.0f' : '.1f')(v)}%` : fmtInt(v))
+    });
+    GreenRLCharts.gridHeatmap($('grid-energy'), {
+      ...common, ariaLabel: 'Total energy for every alpha and gamma', unit: 'total energy',
+      value: metric(s => s.energy * ENERGY_UNITS[settings.energyUnit]),
+      format: (v, compact) => (!Number.isFinite(v) ? '—' : compact ? short(v) : `${formatValue(v)} ${settings.energyUnit}`)
+    });
+    $('grid-energy-title').textContent = `Total energy (${settings.energyUnit})`;
+    $('grid-caption').textContent = `${displayValue(param('algorithm'), run.config.algorithm)} · ${run.config.instance} · ` +
+      `${run.config.reward} · ${run.config.epsilon_decay} decay · ε₀ = ${run.config.epsilon_init}. ` +
+      'Each cell is a whole run; lighter = lower (better), ★ = lowest. Click a cell to open it.';
   }
 
   // Lowest, selected and highest grid under the map, plus how far apart the extremes are.
@@ -692,7 +909,7 @@
     const ref = n => {
       const a = document.createElement('a');
       a.className = 'eq-ref';
-      a.href = `#eq-src-${n}`;
+      a.href = `#ref-${n}`;
       a.textContent = `[${n}]`;
       return a;
     };
@@ -754,18 +971,6 @@
     const tbody = document.createElement('tbody');
     tbody.append(...rows);
     $('eq-projection').replaceChildren(thead, tbody);
-
-    $('eq-sources').replaceChildren(...spec.sources.map(src => {
-      const li = document.createElement('li');
-      li.id = `eq-src-${src.n}`;
-      const a = document.createElement('a');
-      a.href = src.url;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.textContent = src.name;
-      li.append(a, ` (retrieved ${spec.retrieved})`);
-      return li;
-    }));
   }
 
   // Chart options shared by the page and the report, so both always show the same thing.
@@ -836,10 +1041,7 @@
           } : null
         }
       },
-      everyday: everydaySpec(run, episode, basis),
-      routeCaption: inst && !inst.coords
-        ? `${run.config.instance} (ATSP): nodes on a circle.`
-        : `${run.config.instance}: TSPLIB coordinates.`
+      everyday: everydaySpec(run, episode, basis)
     };
   }
 
@@ -856,7 +1058,6 @@
     $('duration-title').textContent = specs.duration.title;
     $('country-caption').textContent = specs.country.caption;
     $('distance-caption').textContent = specs.distance.caption;
-    $('route-caption').textContent = specs.routeCaption;
 
     GreenRLCharts.legend('#energy-legend', specs.energy.legend);
     GreenRLCharts.timeSeries($('energy-chart'), specs.energy.opts);
@@ -870,16 +1071,6 @@
     renderEveryday(specs.everyday);
     GreenRLCharts.legend('#distance-legend', specs.distance.legend);
     GreenRLCharts.timeSeries($('distance-chart'), specs.distance.opts);
-
-    if (!run.hasPaths) return;
-    GreenRLCharts.legend('#route-legend', [
-      { label: `Episode ${epLabel(run, i)}`, color: '--series-1' },
-      ...(state.showBest ? [{ label: `Best (ep ${epLabel(run, bestIdx)})`, color: '--series-2', shape: 'wide' }] : [])
-    ]);
-    GreenRLCharts.routeChart($('route-chart'), {
-      instance: instances[run.config.instance], current: run.path(i), best: bestIdx >= 0 ? run.path(bestIdx) : null,
-      showBest: state.showBest, height: 380, ariaLabel: `Path of episode ${epLabel(run, i)}`
-    });
   }
 
   // ---------- Report ----------
@@ -889,9 +1080,6 @@
     pause();
     const { run } = state;
     const basis = emissionsBasis(run);
-    const pathOption = $('report-path-option');
-    pathOption.hidden = !run.hasPaths;
-    pathOption.querySelector('input').checked = run.hasPaths;
     $('report-scope').textContent =
       `${displayValue(PARAMS[0], run.config.algorithm)} · ${run.config.instance} · seed ${run.config.seed} · ` +
       `episodes ${epLabel(run, 0)}–${epLabel(run, state.episode - 1)} · ${basis.label}`;
@@ -928,7 +1116,7 @@
     energyText, emissionsText, durationText, gapText, epLabel, measuredCountry, emissionsBasis,
     configForm, nearestRuns, updateHash, updateGridSettings
   }, parseRunId(hash.get('a')), parseRunId(hash.get('b')));
-  $('dataset-count').textContent = `${fmtInt(manifest.runs.length)} runs · ∅ = no run`;
+  $('dataset-count').textContent = `${fmtInt(manifest.runs || 0)} runs · ${fmtInt(manifest.episodes || 0)} episodes each`;
   syncExploreForm();
   $('run-id').textContent = runId(state.config);
   updateGridSettings();

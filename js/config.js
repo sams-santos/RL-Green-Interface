@@ -1,24 +1,21 @@
-// Experiment grid offered by the playground. Must match tools/build_dataset.py.
+// Experiment parameters offered by the playground. The values come from the dataset
+// (data/manifest.js, written by tools/build_dataset.py).
 window.GreenRLConfig = (() => {
-  const grid = [0.01, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90, 0.99];
+  const grid = (window.GREEN_RL_MANIFEST || {}).grid || {};
 
   const PARAMS = [
     {
       key: 'algorithm', label: 'Algorithm',
-      values: ['sarsa', 'q-learning', 'double-qlearning'],
       names: { 'sarsa': 'SARSA', 'q-learning': 'Q-learning', 'double-qlearning': 'Double Q-learning' }
     },
-    // Instances = the TSPLIB files in data/instances (see tools/build_reference.py).
-    { key: 'instance', label: 'Instance', values: Object.keys((window.GREEN_RL_REFERENCE || {}).instances || {}) },
-    // Runs that do not record their decay schedule are stored as "unknown".
-    { key: 'epsilon_decay', label: 'Epsilon decay', values: ['linear', 'convex', 'concave', 'step', 'fixed'] },
-    { key: 'reward', label: 'Reward', values: ['R1', 'R2', 'R3'] },
-    { key: 'gamma', label: 'Gamma (γ)', values: grid, numeric: true },
-    { key: 'alpha', label: 'Alpha (α)', values: grid, numeric: true },
-    { key: 'epsilon_init', label: 'Initial epsilon (ε₀)', values: [0.01, 0.05, 0.10], numeric: true },
-    // Seeds (repetitions) come only from the data.
-    { key: 'seed', label: 'Seed (repetition)', values: [], integer: true }
-  ];
+    { key: 'instance', label: 'Instance' },
+    { key: 'epsilon_decay', label: 'Epsilon decay' },
+    { key: 'reward', label: 'Reward' },
+    { key: 'gamma', label: 'Gamma (γ)', numeric: true },
+    { key: 'alpha', label: 'Alpha (α)', numeric: true },
+    { key: 'epsilon_init', label: 'Initial epsilon (ε₀)', numeric: true },
+    { key: 'seed', label: 'Seed', integer: true }
+  ].map(p => ({ ...p, values: grid[p.key] || [] }));
 
   const valueKey = (param, value) =>
     (param.integer ? String(Math.round(value)) : param.numeric ? Number(value).toFixed(2) : String(value));
@@ -38,21 +35,5 @@ window.GreenRLConfig = (() => {
     };
   }
 
-  // Add any value present in the dataset but missing from the grid (e.g. seeds, or an
-  // epsilon decay recorded as "unknown"), so every run can be selected.
-  function extendWithDataset(runIds) {
-    const configs = runIds.map(parseRunId).filter(Boolean);
-    PARAMS.forEach(param => {
-      const known = new Set(param.values.map(v => valueKey(param, v)));
-      const extra = [];
-      configs.forEach(c => {
-        const key = valueKey(param, c[param.key]);
-        if (!known.has(key)) { known.add(key); extra.push(c[param.key]); }
-      });
-      extra.sort((a, b) => (param.numeric || param.integer ? a - b : String(a).localeCompare(String(b))));
-      param.values = param.values.concat(extra);
-    });
-  }
-
-  return { PARAMS, valueKey, displayValue, runId, parseRunId, extendWithDataset };
+  return { PARAMS, valueKey, displayValue, runId, parseRunId };
 })();

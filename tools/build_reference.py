@@ -1,7 +1,7 @@
 """Write data/reference.js: TSPLIB instances, carbon intensity per country and everyday equivalents.
 
 Sources:
-* data/instances/*.tsp, *.atsp - TSPLIB files (coordinates are kept for drawing paths)
+* data/instances/*.tsp, *.atsp - TSPLIB files (type, number of cities, known optimum)
 * data/global_energy_mix.json  - {ISO3: {country_name, iso_alpha2, carbon_intensity, year}},
   carbon_intensity in g CO2eq/kWh. Countries without a carbon intensity are ignored.
 * data/equivalents.json        - everyday comparisons: energy (kWh) or CO2eq (kg) per unit,
@@ -21,24 +21,15 @@ OPTIMA = {"eil51": 426, "berlin52": 7542, "st70": 675, "kroA100": 21282, "tsp225
 
 
 def parse_tsplib(path):
-    header, section, body = {}, None, []
-    for raw in path.read_text().splitlines():
-        line = raw.strip()
-        if not line or line == "EOF":
-            continue
-        if section is None and ":" in line:
+    """Type, number of cities and known optimum of a TSPLIB file (header only)."""
+    header = {}
+    for line in path.read_text().splitlines():
+        if line.strip().endswith("_SECTION"):
+            break
+        if ":" in line:
             key, value = line.split(":", 1)
             header[key.strip().upper()] = value.strip()
-        elif line.endswith("_SECTION"):
-            section = line
-        else:
-            body.extend(line.split())
-    n = int(header["DIMENSION"])
-    coords = None
-    if section == "NODE_COORD_SECTION":
-        values = [float(v) for v in body]
-        coords = [[round(values[i * 3 + 1], 2), round(values[i * 3 + 2], 2)] for i in range(n)]
-    return {"type": header["TYPE"].upper(), "dimension": n, "optimum": OPTIMA.get(path.stem), "coords": coords}
+    return {"type": header["TYPE"].upper(), "dimension": int(header["DIMENSION"]), "optimum": OPTIMA.get(path.stem)}
 
 
 def instances():

@@ -1,14 +1,18 @@
-Green RL Playground
+ECOVIS
 Copyright (c) 2026 Samara Santos
 Original work: https://github.com/sams-santos/RL-Green-Interface
+
+Based on the first version of ECOVIS (2025), for machine-learning models, built by
+Laís C. Medeiros and Samara Santos, who created its name, logo and visual design.
 
 This work is licensed under the Creative Commons
 Attribution-NonCommercial-ShareAlike 4.0 International License
 (CC BY-NC-SA 4.0): https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 In short (the legal code below is what applies):
-  - Attribution: credit the original work. Name "Green RL Playground" by
-    Samara Santos, link to https://github.com/sams-santos/RL-Green-Interface,
+  - Attribution: credit the original work. Name "ECOVIS" by
+    Samara Santos, based on the first version of ECOVIS by Laís C. Medeiros
+    and Samara Santos; link to https://github.com/sams-santos/RL-Green-Interface,
     link to this license, and say whether you made changes.
   - NonCommercial: you may not use the material, or anything adapted from
     it, for commercial purposes, including selling it.
@@ -17,8 +21,8 @@ In short (the legal code below is what applies):
     or a later version), keeping the attribution above.
 
 Material NOT covered by this license (kept under its own terms):
-  - data/instances/ and the coordinates derived from them in
-    data/reference.js: TSPLIB95 problem instances (G. Reinelt, Universitaet
+  - data/instances/ and the instance data derived from them (type, size,
+    known optimum) in data/reference.js: TSPLIB95 problem instances (G. Reinelt, Universitaet
     Heidelberg), http://comopt.ifi.uni-heidelberg.de/software/TSPLIB95/
   - data/global_energy_mix.json: carbon intensity per country, from the
     CodeCarbon project (MIT license).

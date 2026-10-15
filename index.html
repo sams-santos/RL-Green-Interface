@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Green RL Playground</title>
+  <title>ECOVIS</title>
+  <link rel="icon" type="image/png" href="assets/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
   <link rel="stylesheet" href="css/style.css" />
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="data/reference.js"></script>
@@ -12,25 +15,37 @@
   <script src="js/config.js"></script>
   <script src="js/data.js"></script>
   <script src="js/icons.js"></script>
+  <script src="js/scores.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <div class="eyebrow">Interactive experiment viewer</div>
-      <h1>Green RL Playground</h1>
-      <p>Energy, emissions and tour quality of tabular RL agents on TSPLIB instances.</p>
+<div class="app">
+  <nav class="side-nav" aria-label="Views">
+   <div class="side-inner">
+    <div class="brand">
+      <h1><img src="assets/ecovis-logo.png" alt="ECOVIS" width="170" /></h1>
     </div>
-    <div class="status-pill" id="status-pill">Loading…</div>
-  </header>
-
-  <nav class="tabs" role="tablist" aria-label="Views">
-    <button type="button" role="tab" id="tab-btn-explore" aria-controls="tab-explore" aria-selected="true" data-tab="explore"><span class="ic" data-icon="compass"></span> Explore a run</button>
-    <button type="button" role="tab" id="tab-btn-compare" aria-controls="tab-compare" aria-selected="false" data-tab="compare"><span class="ic" data-icon="git-compare"></span> Compare two runs</button>
-    <button type="button" role="tab" id="tab-btn-concepts" aria-controls="tab-concepts" aria-selected="false" data-tab="concepts"><span class="ic" data-icon="book-open-text"></span> Concepts &amp; references</button>
+    <p class="brand-tagline">See the good in green, energy-efficient reinforcement learning.</p>
+    <div role="tablist" aria-orientation="vertical" class="nav-list">
+      <span class="nav-label">Menu</span>
+      <button type="button" role="tab" id="tab-btn-explore" aria-controls="tab-explore" aria-selected="true" data-tab="explore"><span class="ic" data-icon="compass"></span> Explore a run</button>
+      <button type="button" role="tab" id="tab-btn-compare" aria-controls="tab-compare" aria-selected="false" data-tab="compare"><span class="ic" data-icon="git-compare"></span> Compare two runs</button>
+      <span class="nav-label nav-others">Others</span>
+      <button type="button" role="tab" id="tab-btn-concepts" aria-controls="tab-concepts" aria-selected="false" data-tab="concepts"><span class="ic" data-icon="book-open-text"></span> Concepts &amp; references</button>
+    </div>
+   </div>
   </nav>
 
+  <main class="stage">
+    <header class="page-title">
+      <h2 id="page-title">Explore a run</h2>
+      <div class="status-pill" id="status-pill">Loading…</div>
+      <span class="page-icon" id="page-icon" data-icon="compass"></span>
+    </header>
+
   <!-- Explore tab -->
-  <div class="layout" id="tab-explore" role="tabpanel" aria-labelledby="tab-btn-explore">
+  <div class="explore" id="tab-explore" role="tabpanel" aria-labelledby="tab-btn-explore">
+    <div class="chips" id="run-chips" aria-label="Selected run"></div>
+    <div class="layout">
     <aside class="sidebar">
       <section class="panel">
         <h2><span class="ic" data-icon="sliders-horizontal"></span> Configuration</h2>
@@ -68,9 +83,9 @@
         <label for="speed-select">Speed</label>
         <select id="speed-select"></select>
         <label for="episode-range">Show episodes up to</label>
-        <input id="episode-range" type="range" min="1" max="10000" value="1" />
+        <input id="episode-range" type="range" min="1" max="1000" value="1" />
         <div class="goto">
-          <input id="episode-input" type="number" min="0" max="10000" value="0" aria-label="Go to episode" />
+          <input id="episode-input" type="number" min="0" max="1000" value="0" aria-label="Go to episode" />
           <span>of <span id="episode-max">—</span></span>
         </div>
       </section>
@@ -112,6 +127,7 @@
           <h2><span class="ic" data-icon="zap"></span> Energy &amp; emissions</h2>
           <p>Totals up to the current episode.</p>
         </div>
+        <div class="board-row">
         <!-- One board: time, then CPU + RAM = E, E × C = CO2eq (each value with its run total). -->
         <section class="panel energy-board">
           <div class="board-head">
@@ -123,6 +139,32 @@
             </div>
           </div>
           <div class="flow" id="flow"></div>
+        </section>
+
+        <div class="board-side">
+          <section class="panel score-panel">
+            <h3><span class="ic" data-icon="trophy"></span> ECOVIS score</h3>
+            <div id="explore-score"></div>
+            <div id="explore-weight"></div>
+          </section>
+        </div>
+        </div>
+
+        <section class="insights" aria-labelledby="insights-title">
+          <h3 id="insights-title"><span class="ic" data-icon="lightbulb"></span> Insights</h3>
+          <div class="insight-tabs" role="tablist" aria-label="Insights">
+            <button type="button" role="tab" data-insight="run" aria-selected="true">This run</button>
+            <button type="button" role="tab" data-insight="algorithm" aria-selected="false">Algorithm</button>
+            <button type="button" role="tab" data-insight="instance" aria-selected="false">Instance</button>
+            <button type="button" role="tab" data-insight="exploration" aria-selected="false">Exploration</button>
+          </div>
+          <div class="insight-body" id="insight-body" role="tabpanel"></div>
+        </section>
+
+        <section class="panel">
+          <h3><span class="ic" data-icon="zap"></span> Energy by algorithm</h3>
+          <p class="chart-caption" id="algos-caption"></p>
+          <div id="algos"></div>
         </section>
 
         <section class="panel">
@@ -161,15 +203,13 @@
         </div>
         <section class="panel">
           <h3><span class="ic" data-icon="scale"></span> What this compares to</h3>
-          <p class="chart-caption">[n] = source, listed below.</p>
+          <p class="chart-caption">[n] = reference in <a href="#c-refs">Concepts &amp; references</a>.</p>
           <div id="eq-cards" class="eq-groups"></div>
         </section>
         <section class="panel">
           <h3><span class="ic" data-icon="calendar-range"></span> If you ran this every day</h3>
           <p class="chart-caption">The same run, once a day.</p>
           <div class="table-wrap"><table class="compare-table eq-table" id="eq-projection"></table></div>
-          <h4 class="sources-title">Sources</h4>
-          <ol class="sources" id="eq-sources"></ol>
         </section>
 
         <div class="section-head">
@@ -178,7 +218,7 @@
         </div>
         <div class="metrics-grid" id="perf-kpis"></div>
 
-        <div class="charts-grid perf-grid">
+        <div class="perf-grid">
           <section class="panel">
             <div class="panel-header">
               <h3><span class="ic" data-icon="route"></span> Distance per episode</h3>
@@ -187,20 +227,25 @@
             <p class="chart-caption" id="distance-caption"></p>
             <div id="distance-chart" class="chart tall"></div>
           </section>
-          <section class="panel" id="path-panel">
-            <div class="panel-header">
-              <div>
-                <h3><span class="ic" data-icon="map"></span> Path</h3>
-                <p id="route-caption"></p>
-              </div>
-              <div class="legend" id="route-legend"></div>
-            </div>
-            <label class="check"><input type="checkbox" id="show-best" checked /> Show best path so far</label>
-            <div id="route-chart" class="chart route"></div>
-          </section>
         </div>
+
+        <section class="panel">
+          <h3><span class="ic" data-icon="sliders-horizontal"></span> Every α × γ with these settings</h3>
+          <p class="chart-caption" id="grid-caption"></p>
+          <div class="heatmaps">
+            <div>
+              <h4><span class="ic" data-icon="target"></span> Gap to optimum</h4>
+              <div id="grid-gap" class="chart heat"></div>
+            </div>
+            <div>
+              <h4><span class="ic" data-icon="zap"></span> <span id="grid-energy-title">Total energy</span></h4>
+              <div id="grid-energy" class="chart heat"></div>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
+    </div>
   </div>
 
   <!-- Compare tab -->
@@ -226,7 +271,7 @@
           <h3><span class="ic" data-icon="repeat"></span> Episodes</h3>
           <label for="cmp-range">Compare episodes up to</label>
           <div class="range-row">
-            <input id="cmp-range" type="range" min="1" max="10000" value="10000" />
+            <input id="cmp-range" type="range" min="1" max="1000" value="1000" />
             <span id="cmp-range-label"></span>
             <button id="cmp-all" type="button" class="secondary"><span class="ic" data-icon="skip-forward"></span> All episodes</button>
           </div>
@@ -235,6 +280,27 @@
     </section>
 
     <div id="compare-body" class="dashboard">
+      <section class="panel score-panel">
+        <div class="panel-header">
+          <div>
+            <h3><span class="ic" data-icon="trophy"></span> ECOVIS score</h3>
+            <p>Whole runs (all episodes), each scored against every run on its instance, following Fischer et al. Higher is better. <a href="#c-score">How it is calculated</a></p>
+          </div>
+          <div id="cmp-weight"></div>
+        </div>
+        <div class="verdict" id="cmp-verdict"></div>
+        <div class="score-cards" id="cmp-scores"></div>
+        <div class="button-row score-actions">
+          <button type="button" id="cmp-greenest"><span class="ic" data-icon="leaf"></span> <span id="cmp-greenest-label">Compare A with the greenest run</span></button>
+        </div>
+      </section>
+
+      <section class="panel">
+          <h3><span class="ic" data-icon="zap"></span> Energy by algorithm</h3>
+          <p class="chart-caption" id="cmp-algos-caption"></p>
+          <div id="cmp-algos"></div>
+        </section>
+
       <section class="panel">
         <div class="panel-header">
           <div>
@@ -276,6 +342,7 @@
     <nav class="panel concepts-toc" aria-label="Contents">
       <h2><span class="ic" data-icon="list-ordered"></span> Contents</h2>
       <ol>
+        <li><a href="#c-about">About ECOVIS</a></li>
         <li><a href="#c-green">Why measure energy</a></li>
         <li><a href="#c-rl">Reinforcement learning</a></li>
         <li><a href="#c-settings">The settings you choose</a></li>
@@ -283,12 +350,23 @@
         <li><a href="#c-energy">How energy is measured</a></li>
         <li><a href="#c-emissions">From energy to emissions</a></li>
         <li><a href="#c-everyday">Everyday comparisons</a></li>
+        <li><a href="#c-score">The ECOVIS score</a></li>
         <li><a href="#c-charts">Reading the charts</a></li>
         <li><a href="#c-refs">References</a></li>
       </ol>
     </nav>
 
     <article class="concepts-body">
+      <section class="panel concept about" id="c-about">
+        <img class="about-logo" src="assets/ecovis-logo.png" alt="ECOVIS logo: the word ECOVIS over a green footprint" width="160" />
+        <h2><span class="ic" data-icon="leaf"></span> Welcome to ECOVIS!</h2>
+        <p><strong>ECOVIS</strong> is here to help you see the good in green and energy-efficient <strong>reinforcement learning</strong>. It is an <strong>interactive energy analysis</strong> platform that shows how much energy tabular RL agents (Q-learning, SARSA and Double Q-learning) use while they learn to solve travelling salesman problems. Pick an experiment, replay its 1,000 episodes, see the <strong>energy consumption</strong>, emissions and tour quality of every episode, and gain insights into <strong>Sustainable Computing</strong>.</p>
+        <p>ECOVIS was born out of a simple yet powerful idea: to raise awareness about the energy consumption of machine learning. In a world where data-driven decisions are becoming the norm, the environmental impact of these processes often goes unnoticed. We wanted to change that.</p>
+        <p>Here that idea meets reinforcement learning. Each of the 69,120 runs was measured while it trained, so you can see how the algorithm, the reward, the exploration schedule and the α and γ settings change both the tour the agent finds and the energy it takes to find it. The platform is designed to be simple, intuitive and insightful, helping you understand the results and also think about the energy behind them.</p>
+        <p>The first version of ECOVIS, built for machine-learning models, was created by <strong>Laís C. Medeiros</strong> and <strong>Samara Santos</strong>, who designed its name, logo and look. This version brings it to reinforcement learning.</p>
+        <p class="callout"><span class="ic" data-icon="footprints"></span><span>We believe that small changes in the way we approach machine learning can have a big impact on our planet. Join us in making machine learning greener!</span></p>
+      </section>
+
       <section class="panel concept" id="c-green">
         <h2><span class="ic" data-icon="leaf"></span> Why measure the energy of learning?</h2>
         <p>Training a model uses electricity, and producing electricity emits greenhouse gases. <strong>Green AI</strong> asks researchers to report efficiency (energy, time, emissions) next to accuracy, so that methods are compared on both <a class="cite" href="#ref-16">[16]</a>. Studies of large models showed how big this footprint can be and why it should be reported in a standard way <a class="cite" href="#ref-17">[17]</a> <a class="cite" href="#ref-18">[18]</a> <a class="cite" href="#ref-19">[19]</a>.</p>
@@ -330,13 +408,15 @@
           <dt>Exploration ε (ε-greedy)</dt>
           <dd>With probability ε the agent tries a random action; otherwise it takes the best one in its Q-table <a class="cite" href="#ref-9">[9]</a>. ε₀ is the value at the start.</dd>
           <dt>Epsilon decay</dt>
-          <dd>How ε shrinks over the episodes: <em>linear</em> (constant rate), <em>convex</em> (fast at first, then slower), <em>concave</em> (slow at first, then faster), <em>step</em> (in jumps) or <em>fixed</em> (no change). <em>unknown</em> means the data does not record it.</dd>
+          <dd>How ε changes over the 1,000 episodes in this dataset: <em>linear</em> falls at a constant rate to ε₀/1000; <em>concave</em> falls faster at first, then more slowly, ending near 0.37 ε₀; <em>convex</em> stays near ε₀ and then drops steeply towards the end; <em>fixed</em> never changes. <em>step</em> is ε₀ (1 − 0.1 ⌊t/1000⌋): it would fall by 10% every 1,000 episodes, so within these 1,000 episodes it never falls and its runs behave like <em>fixed</em> (same best distances) <a class="cite" href="#ref-29">[29]</a>.</dd>
           <dt>Reward R1–R3</dt>
-          <dd>Three reward functions compared in the experiments. Each turns the cost of a move into a reinforcement; a classic choice is <var>r<sub>ij</sub></var> = −<var>d<sub>ij</sub></var>, so longer moves are penalised more <a class="cite" href="#ref-7">[7]</a>. Several such functions are compared in <a class="cite" href="#ref-8">[8]</a>.</dd>
+          <dd>How the length <var>d<sub>ij</sub></var> of a move becomes a reinforcement <a class="cite" href="#ref-29">[29]</a>:
+            <span class="formula-inline">R1: <var>r</var> = 1/<var>d<sub>ij</sub></var> &nbsp;·&nbsp; R2: <var>r</var> = −<var>d<sub>ij</sub></var> &nbsp;·&nbsp; R3: <var>r</var> = −<var>d<sub>ij</sub></var><sup>2</sup></span>
+            R2 is the classic choice of <a class="cite" href="#ref-7">[7]</a>; R3 penalises long moves more strongly. R1 is the only positive reward: since the Q-table starts at zero, moves already tried look better than untried ones, so the agent explores less. Negative rewards do the opposite, which works like optimistic initial values <a class="cite" href="#ref-9">[9]</a>. In the data, R1 runs end with much larger gaps.</dd>
           <dt>Seed</dt>
-          <dd>The random seed of one repetition. Same settings with another seed give another run of the same experiment: compare seeds to see how much results vary.</dd>
+          <dd>The random seed of a run. Every run in this dataset uses seed 42, so each configuration was trained once.</dd>
         </dl>
-        <p>The grid of α and γ values (0.01 to 0.99) follows the parameter study of Ottoni et al. <a class="cite" href="#ref-7">[7]</a>.</p>
+        <p>The grid of α and γ values (0.01 to 0.99) follows the parameter study of Ottoni et al. <a class="cite" href="#ref-7">[7]</a>. The dataset covers every combination: 3 algorithms × 8 instances × 3 rewards × 5 decays × 3 ε₀ × 8 γ × 8 α = <strong>69,120 runs</strong> of 1,000 episodes each.</p>
       </section>
 
       <section class="panel concept" id="c-tsp">
@@ -346,8 +426,8 @@
           <tbody>
             <tr><th><span class="ic" data-icon="map-pin"></span> State</th><td>the city where the agent is</td></tr>
             <tr><th><span class="ic" data-icon="route"></span> Action</th><td>the next city, among those not yet visited</td></tr>
-            <tr><th><span class="ic" data-icon="trending-down"></span> Reward</th><td>a penalty from the distance travelled, e.g. −<var>d<sub>ij</sub></var> <a class="cite" href="#ref-7">[7]</a></td></tr>
-            <tr><th><span class="ic" data-icon="repeat"></span> Episode</th><td>one complete tour</td></tr>
+            <tr><th><span class="ic" data-icon="trending-down"></span> Reward</th><td>from the move length: 1/<var>d<sub>ij</sub></var>, −<var>d<sub>ij</sub></var> or −<var>d<sub>ij</sub></var><sup>2</sup> (R1–R3) <a class="cite" href="#ref-29">[29]</a></td></tr>
+            <tr><th><span class="ic" data-icon="repeat"></span> Episode</th><td>one complete tour, from a random start city; the Q-table starts at zero and is kept between episodes <a class="cite" href="#ref-29">[29]</a></td></tr>
             <tr><th><span class="ic" data-icon="trophy"></span> Distance</th><td>the length of that tour; lower is better</td></tr>
           </tbody>
         </table>
@@ -361,9 +441,11 @@
         <p>Energy is given in <strong>kilowatt-hours (kWh)</strong>: 1 kWh is 1,000 W used for one hour. The values here are tiny, around 10<sup>−9</sup> kWh per episode, because one tabular episode lasts less than a millisecond.</p>
         <dl class="terms">
           <dt><span class="ic" data-icon="cpu"></span> CPU</dt>
-          <dd>Read from <strong>RAPL</strong> (Running Average Power Limit), energy counters built into Intel and AMD processors <a class="cite" href="#ref-20">[20]</a> <a class="cite" href="#ref-21">[21]</a>.</dd>
+          <dd>Read from <strong>RAPL</strong> (Running Average Power Limit), energy counters built into Intel and AMD processors <a class="cite" href="#ref-20">[20]</a> <a class="cite" href="#ref-21">[21]</a>. CodeCarbon 3.3.1 wraps each episode in <code>start_task</code> / <code>stop_task</code>: the episode's energy is the difference between the counter readings at the start and at the end <a class="cite" href="#ref-29">[29]</a>. The tracker was set to add the DRAM domain to this reading and to prefer the platform (psys) domain when the machine has one, so the CPU column can cover more than the processor <a class="cite" href="#ref-20">[20]</a>.</dd>
+          <dt><span class="ic" data-icon="cpu"></span> Zero CPU episodes</dt>
+          <dd>An episode lasts about one millisecond. If the RAPL counter has not changed between the two readings, the difference is 0 and that energy appears in a later episode; Khan et al. discuss these timing limits of RAPL readings <a class="cite" href="#ref-21">[21]</a>. About a quarter of all episodes record 0 CPU energy (up to two thirds on the smallest instance). Totals over many episodes are reliable; a single episode is not.</dd>
           <dt><span class="ic" data-icon="memory-stick"></span> RAM</dt>
-          <dd>Not measured directly: CodeCarbon estimates it from a fixed power per memory module multiplied by time <a class="cite" href="#ref-20">[20]</a>. That is why the RAM line is almost flat.</dd>
+          <dd>Not measured directly: CodeCarbon estimates it from a fixed power per memory module multiplied by time (20 W in these runs) <a class="cite" href="#ref-20">[20]</a>. That is why the RAM line is almost flat. CodeCarbon leaves the DRAM domain out of the CPU reading by default so that memory is not counted twice; these runs included it, so part of the memory energy may appear in both columns <a class="cite" href="#ref-20">[20]</a>.</dd>
           <dt><span class="ic" data-icon="zap"></span> Energy E</dt>
           <dd>CPU + RAM (+ GPU, not used in these runs).</dd>
           <dt><span class="ic" data-icon="timer"></span> Duration</dt>
@@ -385,9 +467,43 @@
         <p>Very small numbers are hard to picture, so the page divides them by a familiar amount: <strong>equivalent = amount ÷ factor</strong>. The factors come from the US EPA <a class="cite" href="#ref-24">[24]</a>, a Google study of AI prompts <a class="cite" href="#ref-25">[25]</a> and the EcoLogits calculator <a class="cite" href="#ref-26">[26]</a>. <em>If you ran this every day</em> multiplies the amount by 30 and 365.</p>
         <ul class="plain">
           <li>They show orders of magnitude, not exact equivalence.</li>
-          <li>Walking is the body's energy (from food), not electricity.</li>
-          <li>The home figure is a US average.</li>
         </ul>
+      </section>
+
+      <section class="panel concept" id="c-score">
+        <h2><span class="ic" data-icon="trophy"></span> How the ECOVIS score is calculated</h2>
+        <p>The ECOVIS score follows the method of Fischer et al. for assessing and labelling the efficiency of machine learning <a class="cite" href="#ref-27">[27]</a>, in the refined form of their STREP framework <a class="cite" href="#ref-28">[28]</a>. Runs are compared only with runs that solve the same task on the same data in the same environment: here, <strong>every run on the same instance</strong> (8,640 runs: 3 algorithms × 2,880 settings), all measured on the same machine.</p>
+
+        <h3>1 · An index for each property</h3>
+        <p>Each property is divided by the best value observed on the instance, so it becomes a number in (0, 1], where 1 is the best result <a class="cite" href="#ref-28">[28, Eq. 1]</a>. Both properties used here should be minimised:</p>
+        <p class="formula">p<sub>tour</sub> = shortest best tour on the instance ÷ this run's best tour</p>
+        <p class="formula">p<sub>energy</sub> = lowest total energy on the instance ÷ this run's total energy</p>
+        <p>An index of 0.5 means “twice the best value”: it keeps how far apart runs are, not just their order <a class="cite" href="#ref-27">[27]</a>.</p>
+
+        <h3>2 · A compound score</h3>
+        <p>The two indices are combined with weights that add up to 1 <a class="cite" href="#ref-28">[28, Eq. 2]</a>. Like STREP, ECOVIS gives the quality group (tour) and the resource group (energy) the same weight by default; the slider <em>What matters more?</em> changes it.</p>
+        <p class="formula">P = (1 − w) × p<sub>tour</sub> + w × p<sub>energy</sub> &nbsp;&nbsp; (w = 0.5 by default) &nbsp;&nbsp; ECOVIS score = 100 × P</p>
+
+        <h3>3 · Ratings A–E</h3>
+        <p>Each index, and the score, is split into five ratings at the 20 %, 40 %, 60 % and 80 % quantiles of all its values on the instance <a class="cite" href="#ref-27">[27]</a> <a class="cite" href="#ref-28">[28]</a>. A is the top fifth, E the bottom fifth. The <strong>energy label</strong> of a run is the rating of its energy index. The labels take their look from the EU energy label, as in <a class="cite" href="#ref-27">[27]</a>.</p>
+        <table class="mapping grades">
+          <tbody>
+            <tr><th><span class="score-letter small" style="background:#2f7d4f">A</span></th><td>at or above the 80 % quantile</td></tr>
+            <tr><th><span class="score-letter small" style="background:#7fa83a">B</span></th><td>60–80 %</td></tr>
+            <tr><th><span class="score-letter small" style="background:#e2b622">C</span></th><td>40–60 %</td></tr>
+            <tr><th><span class="score-letter small" style="background:#e08a2a">D</span></th><td>20–40 %</td></tr>
+            <tr><th><span class="score-letter small" style="background:#b1527a">E</span></th><td>below the 20 % quantile</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Example</h3>
+        <p>Q-learning on berlin52 (R1, linear decay, ε₀ = 0.10, α = 0.15, γ = 0.90) finds a best tour of 20,261 and uses 5.613 × 10<sup>−6</sup> kWh. On berlin52 the shortest best tour is 7,866 and the lowest energy is 4.041 × 10<sup>−6</sup> kWh:</p>
+        <ul class="plain">
+          <li>p<sub>tour</sub> = 7,866 ÷ 20,261 ≈ <strong>0.39</strong> → rating E (the 20 % quantile is 0.53)</li>
+          <li>p<sub>energy</sub> = 4.041 ÷ 5.613 ≈ <strong>0.72</strong> → rating A (the 80 % quantile is 0.60)</li>
+          <li>P = 0.5 × 0.39 + 0.5 × 0.72 ≈ 0.55 → score <strong>55</strong>, rating <strong>D</strong> (quantiles of P: 0.51, 0.57, 0.64, 0.75)</li>
+        </ul>
+        <p class="callout"><span class="ic" data-icon="lightbulb"></span><span>The ratings depend on the runs being compared: as Fischer et al. note, they change when new results are added <a class="cite" href="#ref-28">[28]</a>. ECOVIS compares runs within one instance only.</span></p>
       </section>
 
       <section class="panel concept" id="c-charts">
@@ -399,6 +515,10 @@
           <dd>The running total from the first episode.</dd>
           <dt>Best so far</dt>
           <dd>The shortest tour found up to each episode; it can only go down. <span class="ic" data-icon="star"></span> marks an episode that sets a new best.</dd>
+          <dt>ECOVIS score</dt>
+          <dd>A 0–100 score of a whole run against every run on its instance, with a rating A–E, following Fischer et al. <a class="cite" href="#ref-27">[27]</a> <a class="cite" href="#ref-28">[28]</a>. See <a href="#c-score">How the ECOVIS score is calculated</a>.</dd>
+          <dt>α × γ grid</dt>
+          <dd>The 64 runs that share every other setting, one cell each, coloured by gap to optimum or total energy. Lighter is lower; ★ marks the lowest; the outlined cell is the open run.</dd>
           <dt>Compare</dt>
           <dd>Two runs side by side; ✓ marks the lower (better) value.</dd>
         </dl>
@@ -448,9 +568,32 @@
           <li id="ref-25">Elsworth, C. et al. (2025). Measuring the environmental impact of delivering AI at Google Scale. <a href="https://arxiv.org/abs/2508.15734" target="_blank" rel="noopener">arXiv:2508.15734</a></li>
           <li id="ref-26">GenAI Impact. EcoLogits Calculator, src/config/constants.py. <a href="https://github.com/genai-impact/ecologits-calculator/blob/942e218903142041f5cfd6f078da7b4c0bb677af/src/config/constants.py" target="_blank" rel="noopener">github.com</a> (retrieved 2026-10-09)</li>
         </ol>
+
+        <h3>Scoring and labels</h3>
+        <ol class="refs" start="27">
+          <li id="ref-27">Fischer, R., Jakobs, M., Mücke, S. &amp; Morik, K. (2023). A Unified Framework for Assessing Energy Efficiency of Machine Learning. In <em>Machine Learning and Principles and Practice of Knowledge Discovery in Databases, ECML PKDD 2022 Workshops</em>, CCIS 1752, 39–54. Springer. <a href="https://doi.org/10.1007/978-3-031-23618-1_3" target="_blank" rel="noopener">doi:10.1007/978-3-031-23618-1_3</a></li>
+          <li id="ref-28">Fischer, R., Liebig, T. &amp; Morik, K. (2024). Towards more sustainable and trustworthy reporting in machine learning. <em>Data Mining and Knowledge Discovery</em>, 38, 1909–1928. <a href="https://doi.org/10.1007/s10618-024-01020-3" target="_blank" rel="noopener">doi:10.1007/s10618-024-01020-3</a></li>
+        </ol>
+
+        <h3>Experiment code</h3>
+        <ol class="refs" start="29">
+          <li id="ref-29">Santos, S. (2026). <em>Energy-Comparison-of-Three-RL-Algorithms</em>: training code for the experiments (Q-learning, SARSA, Double Q-learning on TSPLIB, energy measured with CodeCarbon 3.3.1). GitHub, commit 4419ebd. <a href="https://github.com/sams-santos/Energy-Comparison-of-Three-RL-Algorithms" target="_blank" rel="noopener">github.com/sams-santos/Energy-Comparison-of-Three-RL-Algorithms</a></li>
+        </ol>
       </section>
     </article>
   </div>
+
+    <footer>
+      ECOVIS · reads pre-computed results only; nothing is trained or measured in the browser.<br />
+      © 2026 Samara Santos · first version of ECOVIS by Laís C. Medeiros and Samara Santos (2025) ·
+      <a href="https://github.com/sams-santos/RL-Green-Interface">original project</a> ·
+      licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" rel="license">CC BY-NC-SA 4.0</a> ·
+      flags from <a href="https://github.com/lipis/flag-icons">flag-icons</a> ·
+      icons from <a href="https://lucide.dev">Lucide</a> ·
+      map from <a href="https://www.naturalearthdata.com/">Natural Earth</a>
+    </footer>
+  </main>
+</div>
 
   <dialog id="report-dialog" class="report-dialog">
     <form method="dialog">
@@ -464,7 +607,6 @@
         <label class="check"><input type="checkbox" name="section" value="everyday" checked /> Everyday equivalents and daily projection</label>
         <label class="check"><input type="checkbox" name="section" value="performanceSummary" checked /> Performance summary</label>
         <label class="check"><input type="checkbox" name="section" value="distanceChart" checked /> Distance chart</label>
-        <label class="check" id="report-path-option"><input type="checkbox" name="section" value="bestPath" checked /> Best path (map and node sequence)</label>
         <label class="check"><input type="checkbox" name="section" value="improvements" checked /> History of new best distances</label>
       </fieldset>
       <p class="hint">The configuration is always included.</p>
@@ -476,14 +618,6 @@
     </form>
   </dialog>
 
-  <footer>
-    Green RL Playground · reads pre-computed results only; nothing is trained or measured in the browser.<br />
-    © 2026 Samara Santos · <a href="https://github.com/sams-santos/RL-Green-Interface">original project</a> ·
-    licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" rel="license">CC BY-NC-SA 4.0</a> ·
-    flags from <a href="https://github.com/lipis/flag-icons">flag-icons</a> ·
-    icons from <a href="https://lucide.dev">Lucide</a> ·
-    map from <a href="https://www.naturalearthdata.com/">Natural Earth</a>
-  </footer>
 
   <script src="js/charts.js"></script>
   <script src="js/equivalents.js"></script>

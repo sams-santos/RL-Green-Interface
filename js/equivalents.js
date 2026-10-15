@@ -52,8 +52,9 @@ window.GreenRLEquivalents = (() => {
     iconHtml,
     retrieved: data.retrieved,
     byId: id => data.equivalents.find(e => e.id === id),
-    sourceNumber: id => sourceIds.indexOf(id) + 1,
-    sourceList: () => sourceIds.map((id, k) => ({ n: k + 1, ...data.sources[id] })),
+    // Numbers match the reference list of the Concepts & references tab.
+    sourceNumber: id => data.sources[id]?.ref,
+    sourceList: () => sourceIds.map(id => ({ n: data.sources[id].ref, ...data.sources[id] })),
     describe
   };
 })();

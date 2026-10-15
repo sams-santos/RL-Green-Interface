@@ -1,4 +1,4 @@
-// D3 charts, all flat 2D: time series over episodes, tour map and world emissions map.
+// D3 charts, all flat 2D: time series over episodes, world emissions map and the alpha x gamma heatmap.
 // Colours come from the CSS custom properties in css/style.css.
 window.GreenRLCharts = (() => {
   const token = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -10,6 +10,7 @@ window.GreenRLCharts = (() => {
     if (v == null || !Number.isFinite(v)) return '—';
     const a = Math.abs(v);
     if (a === 0) return '0';
+    if (Number.isInteger(v) && a < 1e9) return d3.format(',')(v);  // distances: exact
     if (a >= 1e6 || a < 1e-2) return d3.format('.3~e')(v);
     return d3.format(',.4~r')(v);
   }
@@ -20,7 +21,7 @@ window.GreenRLCharts = (() => {
   }
 
   // Reduce values[0..end) to `count` buckets: mean/min/max for noisy series, last value for
-  // cumulative or monotonic ones. Keeps 10,000 episodes drawable at ~1 point per 2px.
+  // cumulative or monotonic ones. Keeps long runs drawable at ~1 point per 2px.
   function bucketize(values, end, count, scale) {
     const size = end / count;
     const out = [];
@@ -253,74 +254,6 @@ window.GreenRLCharts = (() => {
     if (el.__hoverEpisode) show(el.__hoverEpisode);
   }
 
-  /**
-   * Tour map. TSP instances use their TSPLIB coordinates; ATSP instances have none, so their
-   * nodes are placed on a circle in index order.
-   */
-  function routeChart(el, opts) {
-    el.replaceChildren();
-    const width = Math.max(el.clientWidth || 600, 260);
-    const height = opts.height || 380;
-    const pad = 22;
-    const inst = opts.instance;
-    if (!inst) return;
-    const n = inst.dimension;
-
-    let points;
-    if (inst.coords) {
-      const xs = inst.coords.map(c => c[0]), ys = inst.coords.map(c => c[1]);
-      const [x0, x1] = d3.extent(xs), [y0, y1] = d3.extent(ys);
-      const k = Math.min((width - 2 * pad) / (x1 - x0 || 1), (height - 2 * pad) / (y1 - y0 || 1));
-      const ox = (width - (x1 - x0) * k) / 2, oy = (height - (y1 - y0) * k) / 2;
-      points = inst.coords.map(([cx, cy]) => [ox + (cx - x0) * k, height - (oy + (cy - y0) * k)]);
-    } else {
-      const r = Math.min(width, height) / 2 - pad;
-      points = d3.range(n).map(i => {
-        const a = (2 * Math.PI * i) / n - Math.PI / 2;
-        return [width / 2 + r * Math.cos(a), height / 2 + r * Math.sin(a)];
-      });
-    }
-
-    const svg = d3.select(el).append('svg')
-      .attr('viewBox', `0 0 ${width} ${height}`).attr('width', width).attr('height', height)
-      .attr('role', 'img').attr('aria-label', opts.ariaLabel || 'Tour map');
-    const surface = token('--panel');
-    const closed = path => {
-      const valid = (path || []).filter(i => i >= 0 && i < n);
-      if (!valid.length) return null;
-      return valid[0] === valid[valid.length - 1] ? valid : valid.concat(valid[0]);
-    };
-    const line = d3.line().x(i => points[i][0]).y(i => points[i][1]);
-
-    const best = opts.showBest ? closed(opts.best) : null;
-    if (best) {
-      svg.append('path').attr('d', line(best)).attr('fill', 'none')
-        .attr('stroke', token('--series-2')).attr('stroke-width', 6).attr('opacity', 0.45)
-        .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round');
-    }
-    const current = closed(opts.current);
-    if (current) {
-      svg.append('path').attr('d', line(current)).attr('fill', 'none')
-        .attr('stroke', token(opts.currentColor || '--series-1')).attr('stroke-width', inst.coords ? 2 : 1.25)
-        .attr('opacity', inst.coords ? 1 : 0.8)
-        .attr('stroke-linejoin', 'round');
-    }
-
-    const radius = n > 100 ? 2.5 : 3.5;
-    svg.append('g').selectAll('circle').data(points).join('circle')
-      .attr('cx', p => p[0]).attr('cy', p => p[1]).attr('r', radius)
-      .attr('fill', surface).attr('stroke', token('--muted')).attr('stroke-width', 1.25)
-      .append('title').text((p, i) => `Node ${i}`);
-
-    if (current) {
-      const s = points[current[0]];
-      svg.append('circle').attr('cx', s[0]).attr('cy', s[1]).attr('r', 6)
-        .attr('fill', token('--text')).attr('stroke', surface).attr('stroke-width', 2);
-      svg.append('text').attr('class', 'route-label').attr('x', s[0] + 9).attr('y', s[1] - 8)
-        .text(`start (${current[0]})`);
-    }
-  }
-
   // Map colours: one step per 100 g CO2eq/kWh of grid carbon intensity. Lightness falls evenly
   // from mint (clean grid) to plum (carbon-intensive), so the order also reads without colour vision.
   const MAP_BINS = [100, 200, 300, 400, 500, 600, 700];
@@ -463,5 +396,77 @@ window.GreenRLCharts = (() => {
     nd.append('text').attr('class', 'axis-note').attr('x', 24).attr('y', 10).text('no data');
   }
 
-  return { timeSeries, routeChart, countryMap, legend, formatValue, flagUrl };
+  /**
+   * Heatmap of one value over the alpha x gamma grid (rows = gamma, columns = alpha), lighter =
+   * lower. Each cell prints its value; the selected run is outlined and the lowest gets a star.
+   * opts: { rows, cols, value(row, col) -> number, format(v) -> text, selected: {row, col},
+   *         rowLabel, colLabel, onSelect(row, col) }
+   */
+  function gridHeatmap(el, opts) {
+    el.querySelectorAll('svg, .chart-tooltip').forEach(node => node.remove());
+    const width = Math.max(el.clientWidth || 400, 240);
+    const m = { top: 8, right: 8, bottom: 40, left: 52 };
+    const cell = Math.max(18, Math.min(52, (width - m.left - m.right) / opts.cols.length));
+    const height = m.top + m.bottom + cell * opts.rows.length;
+    const values = opts.rows.flatMap(r => opts.cols.map(c => opts.value(r, c))).filter(Number.isFinite);
+    const [lo, hi] = d3.extent(values);
+    const color = d3.scaleQuantize().domain([lo, hi > lo ? hi : lo + 1]).range(MAP_COLORS);
+    const dark = v => MAP_COLORS.indexOf(color(v)) >= 5;
+    const best = values.length ? d3.min(values) : NaN;
+    const x0 = m.left;
+    const svg = d3.select(el).append('svg')
+      .attr('viewBox', `0 0 ${width} ${height}`).attr('width', width).attr('height', height)
+      .attr('role', 'img').attr('aria-label', opts.ariaLabel || 'Alpha by gamma grid');
+
+    // Rows top to bottom from the largest gamma, so gamma grows upwards like a y axis.
+    const rows = [...opts.rows].reverse();
+    const tip = makeTooltip(el);
+    rows.forEach((r, i) => {
+      opts.cols.forEach((c, j) => {
+        const v = opts.value(r, c);
+        const g = svg.append('g').attr('class', `heat-cell${opts.onSelect ? ' clickable' : ''}`)
+          .attr('transform', `translate(${x0 + j * cell},${m.top + i * cell})`)
+          .on('click', () => opts.onSelect && opts.onSelect(r, c))
+          .on('pointermove', event => {
+            fillTooltip(tip, `γ = ${opts.rowLabel(r)} · α = ${opts.colLabel(c)}`,
+              [{ label: opts.unit || '', color: Number.isFinite(v) ? color(v) : '#ddd', value: opts.format(v) }]);
+            if (opts.onSelect) {
+              const hint = document.createElement('div');
+              hint.className = 'tip-hint';
+              hint.textContent = 'Click to open this run';
+              tip.appendChild(hint);
+            }
+            tip.hidden = false;
+            const [px, py] = d3.pointer(event, el);
+            tip.style.left = `${px + 14 + tip.offsetWidth > width ? px - tip.offsetWidth - 14 : px + 14}px`;
+            tip.style.top = `${Math.max(0, py - tip.offsetHeight - 8)}px`;
+          })
+          .on('pointerleave', () => { tip.hidden = true; });
+        g.append('rect').attr('width', cell - 2).attr('height', cell - 2).attr('rx', 3)
+          .attr('fill', Number.isFinite(v) ? color(v) : '#f0f2f1');
+        if (cell >= 30 && Number.isFinite(v)) {
+          g.append('text').attr('class', 'heat-label').attr('x', (cell - 2) / 2).attr('y', (cell - 2) / 2 + 4)
+            .attr('text-anchor', 'middle').attr('fill', dark(v) ? '#fff' : token('--text'))
+            .text((v === best ? '★' : '') + opts.format(v, true));
+        }
+        const sel = opts.selected;
+        if (sel && Math.abs(sel.row - r) < 1e-9 && Math.abs(sel.col - c) < 1e-9) {
+          g.append('rect').attr('x', -1).attr('y', -1).attr('width', cell).attr('height', cell).attr('rx', 4)
+            .attr('fill', 'none').attr('stroke', token('--text')).attr('stroke-width', 2.5).attr('pointer-events', 'none');
+        }
+      });
+      svg.append('text').attr('class', 'axis-note').attr('x', x0 - 6).attr('y', m.top + i * cell + cell / 2 + 3)
+        .attr('text-anchor', 'end').text(opts.rowLabel(r));
+    });
+    opts.cols.forEach((c, j) => {
+      svg.append('text').attr('class', 'axis-note').attr('x', x0 + j * cell + (cell - 2) / 2)
+        .attr('y', m.top + rows.length * cell + 12).attr('text-anchor', 'middle').text(opts.colLabel(c));
+    });
+    svg.append('text').attr('class', 'legend-title').attr('x', x0 + (opts.cols.length * cell) / 2)
+      .attr('y', height - 6).attr('text-anchor', 'middle').text('α (learning rate) →');
+    svg.append('text').attr('class', 'legend-title').attr('transform', `translate(12,${m.top + (rows.length * cell) / 2}) rotate(-90)`)
+      .attr('text-anchor', 'middle').text('γ (discount) →');
+  }
+
+  return { timeSeries, countryMap, gridHeatmap, legend, formatValue, flagUrl };
 })();

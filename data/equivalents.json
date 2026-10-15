@@ -3,15 +3,18 @@
   "sources": {
     "epa": {
       "name": "US EPA, Greenhouse Gas Equivalencies Calculator: Calculations and References",
-      "url": "https://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator-calculations-and-references"
+      "url": "https://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator-calculations-and-references",
+      "ref": 24
     },
     "google": {
       "name": "Elsworth et al. (2025), Measuring the environmental impact of delivering AI at Google Scale, arXiv:2508.15734",
-      "url": "https://arxiv.org/abs/2508.15734"
+      "url": "https://arxiv.org/abs/2508.15734",
+      "ref": 25
     },
     "ecologits": {
       "name": "EcoLogits Calculator (GenAI Impact), src/config/constants.py",
-      "url": "https://github.com/genai-impact/ecologits-calculator/blob/942e218903142041f5cfd6f078da7b4c0bb677af/src/config/constants.py"
+      "url": "https://github.com/genai-impact/ecologits-calculator/blob/942e218903142041f5cfd6f078da7b4c0bb677af/src/config/constants.py",
+      "ref": 26
     }
   },
   "equivalents": [
@@ -50,28 +53,6 @@
       "amount_unit": "kWh per km",
       "published": "EV_ENERGY_EQ = 0.17 kWh / km (from Selectra and Tesla)",
       "source": "ecologits"
-    },
-    {
-      "id": "walking",
-      "basis": "energy",
-      "icon": "footprints",
-      "per": "km",
-      "label": "walking",
-      "amount": 0.0544444,
-      "amount_unit": "kWh per km",
-      "published": "WALKING_ENERGY_EQ = 196 kJ / km, walking at 3 km/h with a weight of 70 kg (from runningtools.com)",
-      "source": "ecologits"
-    },
-    {
-      "id": "us_home",
-      "basis": "energy",
-      "icon": "house",
-      "per": "hour",
-      "label": "of a US home's electricity",
-      "amount": 1.392009,
-      "amount_unit": "kWh per hour (12,194 kWh / 8,760 h)",
-      "published": "each home consumed 12,194 kWh of delivered electricity (2022, EIA)",
-      "source": "epa"
     },
     {
       "id": "petrol_car",
