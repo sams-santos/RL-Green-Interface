@@ -42,8 +42,8 @@ window.GreenRLCompare = (() => {
   function load() {
     const ids = [app.runId(cmp.a), app.runId(cmp.b)];
     const missing = ids.map(id => !app.available.has(id));
-    $('cmp-a-status').textContent = missing[0] ? '∅ No run with this combination.' : ids[0];
-    $('cmp-b-status').textContent = missing[1] ? '∅ No run with this combination.' : ids[1];
+    $('cmp-a-status').textContent = missing[0] ? '∅ No run with this combination.' : '';
+    $('cmp-b-status').textContent = missing[1] ? '∅ No run with this combination.' : '';
     const token = ++cmp.token;
     if (missing[0] || missing[1]) {
       cmp.runA = cmp.runB = null;
@@ -181,35 +181,40 @@ window.GreenRLCompare = (() => {
     ];
 
     GreenRLCharts.timeSeries($('cmp-best-chart'), {
-      end: p, base, ariaLabel: 'Best distance so far, run A and run B',
+      end: p, base, yLabel: 'Tour length', ariaLabel: 'Best distance so far, run A and run B',
       series: pair(runA.bestSoFar, runB.bestSoFar, { kind: 'last', curve: 'step' }),
       refLine: optimum ? { value: optimum, label: `optimum ${app.fmtInt(optimum)}` } : null
     });
     GreenRLCharts.timeSeries($('cmp-distance-chart'), {
-      end: p, base, ariaLabel: 'Distance per episode, run A and run B',
+      end: p, base, yLabel: 'Tour length', ariaLabel: 'Distance per episode, run A and run B',
       series: pair(runA.cols.distance, runB.cols.distance, { kind: 'band' })
     });
 
-    const energyUnit = app.settings.energyUnit;
-    $('cmp-energy-title').textContent = `Cumulative energy (${energyUnit})`;
+    // One unit per chart, chosen from the larger whole-run total so it stays put while the slider moves.
+    const total = (run, values, factor = 1) => values[run.n - 1] * factor;
+    const energy = app.energyAxis(Math.max(total(runA, runA.cumulative.energy_consumed), total(runB, runB.cumulative.energy_consumed)));
+    $('cmp-energy-unit').textContent = energy.unit;
     GreenRLCharts.timeSeries($('cmp-energy-chart'), {
-      end: p, base, zeroBased: true, scale: app.ENERGY_UNITS[energyUnit], ariaLabel: 'Cumulative energy, run A and run B',
-      series: pair(runA.cumulative.energy_consumed, runB.cumulative.energy_consumed, { kind: 'last', unit: energyUnit })
+      end: p, base, zeroBased: true, scale: energy.scale, yLabel: `Energy (${energy.unit})`,
+      ariaLabel: 'Cumulative energy, run A and run B',
+      series: pair(runA.cumulative.energy_consumed, runB.cumulative.energy_consumed, { kind: 'last', unit: energy.unit })
     });
 
     // Each run carries its own emissions basis (its measured C, or the selected country's).
     const basisA = app.emissionsBasis(runA), basisB = app.emissionsBasis(runB);
-    const emissionsUnit = app.settings.emissionsUnit;
-    $('cmp-emissions-title').textContent = `Cumulative emissions (${emissionsUnit} CO₂eq · ${basisA.label})`;
+    const emissions = app.emissionsAxis(Math.max(total(runA, basisA.cumulative, basisA.factor), total(runB, basisB.cumulative, basisB.factor)));
+    $('cmp-emissions-title').textContent = `Cumulative emissions · ${basisA.label}`;
+    $('cmp-emissions-unit').textContent = `${emissions.unit} CO₂eq`;
     GreenRLCharts.timeSeries($('cmp-emissions-chart'), {
-      end: p, base, zeroBased: true, scale: app.EMISSION_UNITS[emissionsUnit], ariaLabel: 'Cumulative emissions, run A and run B',
+      end: p, base, zeroBased: true, scale: emissions.scale, yLabel: `Emissions (${emissions.unit} CO₂eq)`,
+      ariaLabel: 'Cumulative emissions, run A and run B',
       series: pair(basisA.cumulative, basisB.cumulative, {
-        kind: 'last', unit: emissionsUnit, a: { scale: basisA.factor }, b: { scale: basisB.factor }
+        kind: 'last', unit: emissions.unit, a: { scale: basisA.factor }, b: { scale: basisB.factor }
       })
     });
   }
 
-  // ECOVIS score of both runs, a verdict, and the energy of each algorithm with A's settings.
+  // ECOVIS score of both runs, a verdict, and a shortcut to the greenest run.
   function renderScores() {
     const { runA, runB } = cmp;
     if (!runA || !runB) return;
@@ -236,24 +241,6 @@ window.GreenRLCompare = (() => {
           `(${algo(greenest.config)}, score ${S.points(greenest.score)})`;
       }
 
-      const inst = app.instances[runA.config.instance];
-      const idB = app.runId(runB.config);
-      const rows = app.PARAMS[0].values.map(algorithm => {
-        const config = { ...runA.config, algorithm };
-        const s = S.scoreOf(tableA, config);
-        if (!s) return null;
-        const id = app.runId(config);
-        return {
-          name: `${algo(config)}${id === idA ? ' · A' : ''}${id === idB ? ' · B' : ''}`,
-          energy: s.energy, energyGrade: s.energyGrade, energyText: app.energyText(s.energy),
-          tour: inst?.optimum ? `gap ${app.gapText(runA, s.best)}` : `best ${app.fmtInt(s.best)}`,
-          current: id === idA || id === idB,
-          onClick: id === idA ? null : () => { cmp.b = config; onConfigChange(); }
-        };
-      }).filter(Boolean);
-      $('cmp-algos-caption').textContent = `Total energy of each algorithm with run A's other settings on ${runA.config.instance}. ` +
-        'Letters are energy labels (A = the fifth of runs with the lowest energy). Click a bar to compare it as run B.';
-      $('cmp-algos').replaceChildren(S.view.algorithmBars(rows));
     }).catch(() => {});
   }
 

@@ -12,34 +12,38 @@ Nothing is trained or measured in the browser; the page only reads the dataset i
 
 ## Running
 
-Open `index.html` in a browser. No server or build step is needed (D3 is loaded from a CDN), and it also works on GitHub Pages. The run data is compressed, so the browser must support `DecompressionStream`: Chrome or Edge 80+, Firefox 113+, Safari 16.4+.
+**Online:** https://sams-santos.github.io/RL-Green-Interface/
 
-The URL keeps the current view (tab, run, episode, country), so a view can be shared by link (e.g. `#tab=concepts`).
+**Locally:** open `index.html` in a browser. No server or build step is needed (D3 is loaded from a CDN). The run data is compressed, so the browser must support `DecompressionStream`: Chrome or Edge 80+, Firefox 113+, Safari 16.4+.
+
+The URL keeps the current view (tab, run, episode, Energy or Performance, country), so a view can be shared by link (e.g. `#tab=concepts`).
 
 ## Tabs
 
-The views are listed in the menu on the left; each opens under a title bar that also shows the playback status. The look (olive page, sage frame, cream cards, dark-green buttons, yellow insights card) follows the first version of ECOVIS, built for machine-learning models by Laís C. Medeiros and Samara Santos through a design study with expert interviews ([Santos et al., CGVC 2026](https://doi.org/10.2312/cgvc.20261003)), and adapted here to reinforcement learning.
+The views are listed in the menu on the left; each opens under a title bar that also shows the playback status. A visit without a run in the URL starts at Initial setup. The look (olive page, sage frame, cream cards, dark-green buttons, yellow verdict card) follows the first version of ECOVIS, built for machine-learning models by Laís C. Medeiros and Samara Santos through a design study with expert interviews ([Santos et al., CGVC 2026](https://doi.org/10.2312/cgvc.20261003)), and adapted here to reinforcement learning.
 
-**Explore a run.** Pick one configuration and replay its episodes:
+**Initial setup.** The run opened in Explore (algorithm, instance, reward, decay, ε₀, γ, α, seed; options with no run are marked ∅), the electricity grid (country) and the energy unit (joules or watt-hours), used in every view.
 
-- **Chips** above the page summarise the selected run (algorithm, instance, reward, decay, ε₀, α, γ).
-- **Configuration** holds the run's parameters, then the electricity grid (country) and the energy and emissions units.
-- **ECOVIS score** (0–100, rating A–E) follows the efficiency index, compound score and rating of Fischer et al. ([ECML PKDD 2022 workshops](https://doi.org/10.1007/978-3-031-23618-1_3); STREP, [Data Min Knowl Disc 2024](https://doi.org/10.1007/s10618-024-01020-3)). Against the 8,640 runs on the same instance, each property becomes an index p = best value on the instance ÷ this run's value (tour length and total energy); the score is 100 × ((1 − w) · p_tour + w · p_energy), with w set by the *What matters more?* slider (0.5 by default, as in STREP); ratings A–E split each index and the score at the 20/40/60/80 % quantiles. The energy rating is the run's **energy label**. The Concepts & references tab explains the calculation with a worked example.
-- **Energy by algorithm** shows, for the same settings, the total energy of SARSA, Q-learning and Double Q-learning as bars coloured by energy label, with the gap to optimum; click one to open it.
-- **Insights** (yellow card) has four tabs: *This run* ranks the run among the 64 α × γ runs with the same settings and names the shortest-tour and least-energy ones; *Algorithm*, *Instance* and *Exploration* explain the selected settings.
-- The **Energy & emissions** board shows the elapsed time, how the energy splits between CPU and RAM, and the calculation with the run's own numbers: CPU + RAM = E, E × C = CO₂eq. Each value covers the episodes shown so far, with the whole run's total below it.
-- The **charts** show energy, emissions, duration and distance per episode, the emissions map and the everyday equivalents.
-- **Every α × γ with these settings** shows, from the summary files, the gap to optimum and the total energy of the 64 runs that share the other settings. Click a cell to open that run.
+**Explore a run.** Replay the episodes of the run chosen in Initial setup:
+
+- **Chips** at the top summarise the selected run (algorithm, instance, reward, decay, ε₀, α, γ); *Change* opens Initial setup.
+- The **playback bar** plays the episodes or jumps to one, sets the speed, switches the charts between *per episode* and *cumulative* values, and marks an episode that sets a new best.
+- Two views split the results; only the open one is drawn. Each starts with the ECOVIS score next to its summary, then three charts: one large and two small below it. Click a small chart to show it large.
+  - **Energy**: the energy board (elapsed time, CPU/RAM split, CPU + RAM = E, E × C = CO₂eq, each value for the episodes shown so far with the whole run's total below it); energy, emissions and duration per episode; the emissions map; and what the run adds up to if repeated every day;
+  - **Performance**: best distance, gap to optimum, current distance and improvements; distance per episode, gap to optimum per episode, and the running count of new best tours.
+- Every chart has axis titles, and its unit is shown next to its title. Energy is shown in joules (or watt-hours) and emissions in grams of CO₂eq, with the SI prefix that suits each value (20.2 J, 36 mJ, 1.63 mg), so no number needs scientific notation.
+- **Colour-blind palette** (button under the menu) swaps every colour that carries meaning for the palette of Okabe and Ito ([Color Universal Design](https://jfly.uni-koeln.de/color/)), on every tab and in the exported report: series in blue, vermillion and sky blue; ratings from blue (A) through yellow (C) to vermillion (E); the map from yellow through bluish green to blue; buttons, sliders and icons in blue; the best tour highlighted in orange; energy tiles in a bluish-green tint and emissions tiles in a sky-blue tint. Only the neutral olive and cream frame stays. The choice is remembered in the browser.
+- *Export report* saves the run up to the current episode as HTML or PDF.
+- The **ECOVIS score** (0–100, rating A–E) follows the efficiency index, compound score and rating of Fischer et al. ([ECML PKDD 2022 workshops](https://doi.org/10.1007/978-3-031-23618-1_3); STREP, [Data Min Knowl Disc 2024](https://doi.org/10.1007/s10618-024-01020-3)). Against the 8,640 runs on the same instance, each property becomes an index p = best value on the instance ÷ this run's value (tour length and total energy); the score is 100 × ((1 − w) · p_tour + w · p_energy), with w set by the *What matters more?* slider (0.5 by default, as in STREP); ratings A–E split each index and the score at the 20/40/60/80 % quantiles. The energy rating is the run's **energy label**. The Concepts & references tab explains the calculation with a worked example.
 
 **Compare two runs.** Pick run A and run B (any two configurations):
 
-- **Configuration for both runs** holds the electricity grid, the units and the number of episodes to compare.
+- A slider sets the number of episodes to compare; the grid and units come from Initial setup.
 - **ECOVIS score** cards for A and B, with a verdict ("B is the greener choice: 17% less energy and a 60% shorter tour", or the trade-off) and what the energy difference adds up to if the run were repeated daily for a year. A button compares A with the highest-scoring run on its instance.
-- **Energy by algorithm** for run A's settings; click a bar to compare it as run B.
 - A summary table shows the difference of B relative to A; ✓ marks the lower (better) value.
 - Line charts overlay best distance, distance per episode, cumulative energy and cumulative emissions.
 
-**Concepts & references.** A short, illustrated text on the ideas behind the platform:
+**Concepts & references.** A short, illustrated text on the ideas behind the platform, one section at a time (pick it in the contents list):
 
 - why the energy of learning is measured (Green AI);
 - reinforcement learning, with Q-learning, SARSA and Double Q-learning;
@@ -49,9 +53,9 @@ The views are listed in the menu on the left; each opens under a title bar that 
 - CO₂eq and carbon intensity;
 - the everyday comparisons and how to read the charts.
 
-Each claim cites a numbered reference: the author's publications, the original papers and the data sources. Citation links scroll to the reference without changing the URL.
+Each claim cites a numbered reference: the author's publications, the original papers and the data sources. A citation link opens the References section at that reference, without changing the URL.
 
-There is one set of grid and unit controls, shared by the Explore and Compare tabs. Icons mark every metric, and the same quantity always has the same icon (for example, a lightning bolt for energy and a cloud for emissions).
+There is one set of grid and unit controls, in Initial setup, shared by the Explore and Compare tabs. Icons mark every metric, and the same quantity always has the same icon (for example, a lightning bolt for energy and a cloud for emissions).
 
 ## Report
 
@@ -76,7 +80,7 @@ CO₂eq = E × C
 - **E** is the energy consumed, in kWh.
 - **C** is the carbon intensity of the electricity, in g CO₂eq/kWh.
 
-The **Electricity grid** control (in Configuration) offers:
+The **Electricity grid** control (in Initial setup) offers:
 
 - **As measured in the experiment.** This uses the emissions recorded in the data.
 - **Any of 212 countries.** This recomputes the emissions from the measured energy, using the country's C.
@@ -90,14 +94,11 @@ Each country is coloured by the emissions this run would have produced on its gr
 - **Colours.** There is one step per 100 g CO₂eq/kWh, from mint (cleanest) to plum (most carbon-intensive). Each step is darker than the one before, so the scale can be read without colour vision.
 - **Small countries.** Countries too small for the map are drawn as dots. Countries with no data are hatched.
 - **Interaction.** Hover over a country to see its values. Click it to use its grid.
-- **Summary.** Cards below the map show the cleanest grid, the selected one and the most carbon-intensive one. A sentence says how many times more the same run emits on the dirtiest grid than on the cleanest.
+- **Summary.** Cards to the right of the map show the cleanest grid, the selected one and the most carbon-intensive one. A sentence says how many times more the same run emits on the dirtiest grid than on the cleanest.
 
 ## Everyday equivalents
 
-The **In everyday terms** section covers the episodes shown so far. Emissions comparisons follow the selected country.
-
-- **What this compares to** places the energy and emissions next to familiar activities, each with an icon.
-- **If you ran this every day** repeats the same amount daily for a month (30 days) and a year (365 days).
+**If you ran this every day** (Energy view) covers the episodes shown so far and repeats the same amount daily for a month (30 days) and a year (365 days), next to familiar activities: phone charges, AI prompts, electric and petrol car distance, video streaming and the time a tree takes to absorb it. Emissions comparisons follow the selected country. The exported report also lists each comparison for the run itself.
 
 Each comparison is one division: amount ÷ factor. `data/equivalents.json` keeps, for each factor, the value exactly as published, the normalised factor, its source and its icon:
 
@@ -151,7 +152,7 @@ python tools/fetch_release.py <download folder>     # about 5.4 GB; keep it outs
 python tools/build_dataset.py <download folder>     # about 10 minutes
 ```
 
-The repository is private, so `fetch_release.py` uses `GITHUB_TOKEN` if it is set, or else the GitHub credential that git already uses.
+The repository is public, so `fetch_release.py` needs no sign-in (it sends `GITHUB_TOKEN` with the release query if it is set, for a higher rate limit).
 
 **Episode files** have one row per episode. They are read with these columns:
 
@@ -194,7 +195,7 @@ assets/                      ECOVIS logo and favicon
 css/style.css                flat, light pastel theme (chart colours checked for colour-blind readers)
 js/config.js                 parameter grid and run ids
 js/data.js                   on-demand run loading and derived series
-js/charts.js                 D3 charts: time series, world map, α × γ heatmap (all 2D)
+js/charts.js                 D3 charts: time series and world map (all 2D), SI-prefix formatting
 js/icons.js                  Lucide line icons used by the page
 js/equivalents.js            everyday comparisons
 js/scores.js                 ECOVIS score, energy labels and their views

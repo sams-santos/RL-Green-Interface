@@ -12,11 +12,11 @@
 window.GreenRLScores = (() => {
   const { PARAMS, valueKey } = GreenRLConfig;
   const GRADES = [
-    { letter: 'A', color: '#2f7d4f' },
-    { letter: 'B', color: '#7fa83a' },
-    { letter: 'C', color: '#e2b622' },
-    { letter: 'D', color: '#e08a2a' },
-    { letter: 'E', color: '#b1527a' }
+    { letter: 'A', color: 'var(--grade-a)', ink: 'var(--grade-a-ink)' },
+    { letter: 'B', color: 'var(--grade-b)', ink: 'var(--grade-b-ink)' },
+    { letter: 'C', color: 'var(--grade-c)', ink: 'var(--grade-c-ink)' },
+    { letter: 'D', color: 'var(--grade-d)', ink: 'var(--grade-d-ink)' },
+    { letter: 'E', color: 'var(--grade-e)', ink: 'var(--grade-e-ink)' }
   ];
   const QUANTILES = [0.2, 0.4, 0.6, 0.8];
   const tables = new Map();   // instance -> Promise<table>
@@ -149,6 +149,7 @@ window.GreenRLScores = (() => {
       const row = el('div', `grade-row${g === current ? ' current' : ''}`);
       const bar = el('span', 'grade-bar', g.letter);
       bar.style.background = g.color;
+      bar.style.color = g.ink;
       bar.style.width = `${40 + i * 13}%`;
       row.appendChild(bar);
       if (g === current) row.appendChild(el('span', 'grade-arrow', g.letter));
@@ -163,6 +164,7 @@ window.GreenRLScores = (() => {
     const head = el('div', 'meter-head');
     const letter = el('span', 'score-letter small', rating.letter);
     letter.style.background = rating.color;
+    letter.style.color = rating.ink;
     head.append(GreenRLIcons.el(iconName), el('span', null, label), el('strong', null, index.toFixed(2)), letter);
     const track = el('div', 'meter-track');
     const fill = el('span');
@@ -186,6 +188,7 @@ window.GreenRLScores = (() => {
     const big = el('div', 'score-big');
     const badge = el('span', 'score-letter', s.grade.letter);
     badge.style.background = s.grade.color;
+    badge.style.color = s.grade.ink;
     big.append(el('strong', null, points(s.score)), el('span', null, '/100'), badge);
     head.appendChild(big);
     head.appendChild(el('small', 'score-sub', `ECOVIS score · rated against ${s.n.toLocaleString('en')} runs on ${instance}`));
@@ -231,38 +234,9 @@ window.GreenRLScores = (() => {
     return box;
   }
 
-  // One bar per algorithm for the same settings: energy (bar length, coloured by energy label)
-  // and gap. `rows`: [{ name, energy, energyText, tour, current, onClick }]
-  function algorithmBars(rows, note) {
-    const box = el('div', 'algo-bars');
-    const max = Math.max(...rows.map(r => r.energy));
-    const min = Math.min(...rows.map(r => r.energy));
-    rows.forEach(r => {
-      const row = el(r.onClick ? 'button' : 'div', `algo-bar${r.current ? ' current' : ''}`);
-      if (r.onClick) { row.type = 'button'; row.addEventListener('click', r.onClick); }
-      const name = el('span', 'algo-name', r.name);
-      const track = el('span', 'algo-track');
-      const fill = el('span', 'algo-fill');
-      fill.style.width = `${(r.energy / max) * 100}%`;
-      fill.style.background = r.energyGrade.color;
-      const letter = el('span', 'score-letter small', r.energyGrade.letter);
-      letter.style.background = r.energyGrade.color;
-      track.append(fill);
-      const value = el('span', 'algo-value');
-      value.append(el('strong', null, r.energyText),
-        el('small', null, r.energy === min ? 'lowest energy' : `+${Math.round((r.energy / min - 1) * 100)}% vs lowest`));
-      const tour = el('span', 'algo-tour', r.tour);
-      if (r.energy === min) name.prepend(GreenRLIcons.el('leaf'));
-      row.append(name, letter, track, value, tour);
-      box.appendChild(row);
-    });
-    if (note) box.appendChild(el('p', 'algo-note', note));
-    return box;
-  }
-
   return {
     GRADES, registerSummaries, load, scoreOf, top, points,
-    view: { card, ladder, weightControl, algorithmBars },
+    view: { card, ladder, weightControl },
     get weight() { return weight; },
     set weight(w) { weight = Math.min(1, Math.max(0, w)); }
   };

@@ -1,4 +1,4 @@
-// D3 charts, all flat 2D: time series over episodes, world emissions map and the alpha x gamma heatmap.
+// D3 charts, all flat 2D: time series over episodes and the world emissions map.
 // Colours come from the CSS custom properties in css/style.css.
 window.GreenRLCharts = (() => {
   const token = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -13,6 +13,25 @@ window.GreenRLCharts = (() => {
     if (Number.isInteger(v) && a < 1e9) return d3.format(',')(v);  // distances: exact
     if (a >= 1e6 || a < 1e-2) return d3.format('.3~e')(v);
     return d3.format(',.4~r')(v);
+  }
+
+  // SI prefixes, so small amounts read as 20.2 J or 1.63 mg instead of 5.6e-6 kWh.
+  const PREFIXES = [[1e-9, 'n'], [1e-6, 'µ'], [1e-3, 'm'], [1, ''], [1e3, 'k'], [1e6, 'M'], [1e9, 'G']];
+
+  // The prefix that puts |v| between 1 and 1000: { factor, symbol }.
+  function siPrefix(v) {
+    const a = Math.abs(v);
+    if (!Number.isFinite(a) || a === 0) return { factor: 1, symbol: '' };
+    let pick = PREFIXES[0];
+    PREFIXES.forEach(p => { if (a >= p[0]) pick = p; });
+    return { factor: pick[0], symbol: pick[1] };
+  }
+
+  // A value in a base unit (J, Wh, g, s) with the prefix that suits it: formatSI(0.0203, 'J') = '20.3 mJ'.
+  function formatSI(v, unit) {
+    if (v == null || !Number.isFinite(v)) return '—';
+    const { factor, symbol } = siPrefix(v);
+    return `${formatValue(v / factor)} ${symbol}${unit}`;
   }
 
   function tickFormat(max) {
@@ -97,14 +116,17 @@ window.GreenRLCharts = (() => {
    *                 curve: 'step' | 'linear', unit, endLabel (print the last value next to its dot),
    *                 scale (extra factor for this series only) }]
    * opts.scale, opts.zeroBased, opts.refLine {value,label}, opts.marker {episode,value,label}
+   * opts.yLabel: y-axis title (the x axis is always "Episode"); opts.interactive: false draws a
+   * still chart without the hover layer (the small charts that are buttons).
+   * The chart fills its container (its CSS height), or opts.height when the container has none.
    * Episodes are passed as positions 1..end; opts.base is the number displayed for position 1
    * (0 when the source data counts episodes from 0).
    */
   function timeSeries(el, opts) {
     el.querySelectorAll('svg, .chart-tooltip').forEach(node => node.remove());
     const width = Math.max(el.clientWidth || 600, 260);
-    const height = opts.height || 240;
-    const m = { top: 16, right: 20, bottom: 28, left: 64 };
+    const height = el.clientHeight || opts.height || 240;
+    const m = { top: 16, right: 20, bottom: 46, left: opts.yLabel ? 80 : 64 };
     const end = Math.max(1, opts.end);
     const shift = (opts.base ?? 1) - 1;  // position -> displayed episode number
     const scale = opts.scale || 1;
@@ -152,8 +174,18 @@ window.GreenRLCharts = (() => {
       .call(d3.axisBottom(x).ticks(Math.min(6, Math.floor(width / 90))).tickFormat(d3.format(',d')).tickSizeOuter(0));
     svg.append('g').attr('class', 'axis axis-y')
       .attr('transform', `translate(${m.left},0)`)
-      .call(d3.axisLeft(y).ticks(5).tickFormat(tickFormat(y.domain()[1])).tickSize(0).tickPadding(8))
+      .call(d3.axisLeft(y).ticks(height < 200 ? 3 : 5).tickFormat(tickFormat(y.domain()[1])).tickSize(0).tickPadding(8))
       .call(g => g.select('.domain').remove());
+
+    // Axis titles: episodes along x, the measured quantity (with its unit) up the y axis.
+    svg.append('text').attr('class', 'axis-title')
+      .attr('x', m.left + (width - m.left - m.right) / 2).attr('y', height - 6).attr('text-anchor', 'middle')
+      .text('Episode');
+    if (opts.yLabel) {
+      svg.append('text').attr('class', 'axis-title')
+        .attr('transform', `translate(14,${m.top + (height - m.top - m.bottom) / 2}) rotate(-90)`)
+        .attr('text-anchor', 'middle').text(opts.yLabel);
+    }
 
     if (opts.refLine && Number.isFinite(opts.refLine.value)) {
       const ry = y(opts.refLine.value);
@@ -205,6 +237,8 @@ window.GreenRLCharts = (() => {
       g.append('text').attr('x', right ? mx - 10 : mx + 10).attr('y', my + 18)
         .attr('text-anchor', right ? 'end' : 'start').text(opts.marker.label);
     }
+
+    if (opts.interactive === false) return;
 
     // Hover layer: crosshair snaps to the nearest episode and the tooltip lists every series.
     const tip = makeTooltip(el);
@@ -258,6 +292,9 @@ window.GreenRLCharts = (() => {
   // from mint (clean grid) to plum (carbon-intensive), so the order also reads without colour vision.
   const MAP_BINS = [100, 200, 300, 400, 500, 600, 700];
   const MAP_COLORS = ['#e8f7ec', '#f1f0c0', '#f7dc9c', '#f4c086', '#ee9f84', '#e08392', '#c56c97', '#985a8c'];
+  // Colour-blind palette: yellow to bluish green to blue (Okabe–Ito hues), lightness still falling evenly.
+  const MAP_COLORS_CVD = d3.quantize(d3.piecewise(d3.interpolateLab, ['#F0E442', '#009E73', '#0072B2']), 8);
+  const mapColors = () => (document.documentElement.dataset.palette === 'cvd' ? MAP_COLORS_CVD : MAP_COLORS);
   const NO_DATA = '#d3dbd7';
   let worldCache = null;
   let mapCount = 0;
@@ -289,7 +326,8 @@ window.GreenRLCharts = (() => {
     const legendHeight = 64;
     const { shapes, points } = world();
     const byIso = new Map(opts.countries.map(c => [c.iso, c]));
-    const color = d3.scaleThreshold().domain(MAP_BINS).range(MAP_COLORS);
+    const colors = mapColors();
+    const color = d3.scaleThreshold().domain(MAP_BINS).range(colors);
     const unit = opts.unit ? ` ${opts.unit}` : '';
     const ink = token('--text');
     const surface = token('--panel');
@@ -374,10 +412,10 @@ window.GreenRLCharts = (() => {
 
     // Legend: one swatch per step, labelled in emissions (top) and grid carbon intensity (bottom).
     const lg = svg.append('g').attr('class', 'map-legend').attr('transform', `translate(8,${height - legendHeight + 10})`);
-    const sw = Math.max(30, Math.min(70, (width - 170) / MAP_COLORS.length));
+    const sw = Math.max(30, Math.min(70, (width - 170) / colors.length));
     lg.append('text').attr('class', 'legend-title').attr('x', 0).attr('y', 0)
       .text(`Emissions of this run${opts.unit ? ` (${opts.unit})` : ''} · darker = more CO₂ for the same energy`);
-    MAP_COLORS.forEach((c, k) => {
+    colors.forEach((c, k) => {
       lg.append('rect').attr('x', k * sw).attr('y', 7).attr('width', sw - 2).attr('height', 12).attr('rx', 2)
         .attr('fill', c).attr('stroke', NO_DATA).attr('stroke-width', 0.5);
     });
@@ -389,84 +427,12 @@ window.GreenRLCharts = (() => {
       }
       lg.append('text').attr('class', 'axis-note faint').attr('x', x).attr('y', 50).attr('text-anchor', 'middle').text(b);
     });
-    lg.append('text').attr('class', 'axis-note faint').attr('x', MAP_COLORS.length * sw + 4).attr('y', 50).text('g CO₂eq/kWh');
-    const nd = lg.append('g').attr('transform', `translate(${MAP_COLORS.length * sw + 10},7)`);
+    lg.append('text').attr('class', 'axis-note faint').attr('x', colors.length * sw + 4).attr('y', 50).text('g CO₂eq/kWh');
+    const nd = lg.append('g').attr('transform', `translate(${colors.length * sw + 10},7)`);
     nd.append('rect').attr('width', 18).attr('height', 12).attr('rx', 2).attr('fill', `url(#${hatchId})`)
       .attr('stroke', NO_DATA).attr('stroke-width', 0.5);
     nd.append('text').attr('class', 'axis-note').attr('x', 24).attr('y', 10).text('no data');
   }
 
-  /**
-   * Heatmap of one value over the alpha x gamma grid (rows = gamma, columns = alpha), lighter =
-   * lower. Each cell prints its value; the selected run is outlined and the lowest gets a star.
-   * opts: { rows, cols, value(row, col) -> number, format(v) -> text, selected: {row, col},
-   *         rowLabel, colLabel, onSelect(row, col) }
-   */
-  function gridHeatmap(el, opts) {
-    el.querySelectorAll('svg, .chart-tooltip').forEach(node => node.remove());
-    const width = Math.max(el.clientWidth || 400, 240);
-    const m = { top: 8, right: 8, bottom: 40, left: 52 };
-    const cell = Math.max(18, Math.min(52, (width - m.left - m.right) / opts.cols.length));
-    const height = m.top + m.bottom + cell * opts.rows.length;
-    const values = opts.rows.flatMap(r => opts.cols.map(c => opts.value(r, c))).filter(Number.isFinite);
-    const [lo, hi] = d3.extent(values);
-    const color = d3.scaleQuantize().domain([lo, hi > lo ? hi : lo + 1]).range(MAP_COLORS);
-    const dark = v => MAP_COLORS.indexOf(color(v)) >= 5;
-    const best = values.length ? d3.min(values) : NaN;
-    const x0 = m.left;
-    const svg = d3.select(el).append('svg')
-      .attr('viewBox', `0 0 ${width} ${height}`).attr('width', width).attr('height', height)
-      .attr('role', 'img').attr('aria-label', opts.ariaLabel || 'Alpha by gamma grid');
-
-    // Rows top to bottom from the largest gamma, so gamma grows upwards like a y axis.
-    const rows = [...opts.rows].reverse();
-    const tip = makeTooltip(el);
-    rows.forEach((r, i) => {
-      opts.cols.forEach((c, j) => {
-        const v = opts.value(r, c);
-        const g = svg.append('g').attr('class', `heat-cell${opts.onSelect ? ' clickable' : ''}`)
-          .attr('transform', `translate(${x0 + j * cell},${m.top + i * cell})`)
-          .on('click', () => opts.onSelect && opts.onSelect(r, c))
-          .on('pointermove', event => {
-            fillTooltip(tip, `γ = ${opts.rowLabel(r)} · α = ${opts.colLabel(c)}`,
-              [{ label: opts.unit || '', color: Number.isFinite(v) ? color(v) : '#ddd', value: opts.format(v) }]);
-            if (opts.onSelect) {
-              const hint = document.createElement('div');
-              hint.className = 'tip-hint';
-              hint.textContent = 'Click to open this run';
-              tip.appendChild(hint);
-            }
-            tip.hidden = false;
-            const [px, py] = d3.pointer(event, el);
-            tip.style.left = `${px + 14 + tip.offsetWidth > width ? px - tip.offsetWidth - 14 : px + 14}px`;
-            tip.style.top = `${Math.max(0, py - tip.offsetHeight - 8)}px`;
-          })
-          .on('pointerleave', () => { tip.hidden = true; });
-        g.append('rect').attr('width', cell - 2).attr('height', cell - 2).attr('rx', 3)
-          .attr('fill', Number.isFinite(v) ? color(v) : '#f0f2f1');
-        if (cell >= 30 && Number.isFinite(v)) {
-          g.append('text').attr('class', 'heat-label').attr('x', (cell - 2) / 2).attr('y', (cell - 2) / 2 + 4)
-            .attr('text-anchor', 'middle').attr('fill', dark(v) ? '#fff' : token('--text'))
-            .text((v === best ? '★' : '') + opts.format(v, true));
-        }
-        const sel = opts.selected;
-        if (sel && Math.abs(sel.row - r) < 1e-9 && Math.abs(sel.col - c) < 1e-9) {
-          g.append('rect').attr('x', -1).attr('y', -1).attr('width', cell).attr('height', cell).attr('rx', 4)
-            .attr('fill', 'none').attr('stroke', token('--text')).attr('stroke-width', 2.5).attr('pointer-events', 'none');
-        }
-      });
-      svg.append('text').attr('class', 'axis-note').attr('x', x0 - 6).attr('y', m.top + i * cell + cell / 2 + 3)
-        .attr('text-anchor', 'end').text(opts.rowLabel(r));
-    });
-    opts.cols.forEach((c, j) => {
-      svg.append('text').attr('class', 'axis-note').attr('x', x0 + j * cell + (cell - 2) / 2)
-        .attr('y', m.top + rows.length * cell + 12).attr('text-anchor', 'middle').text(opts.colLabel(c));
-    });
-    svg.append('text').attr('class', 'legend-title').attr('x', x0 + (opts.cols.length * cell) / 2)
-      .attr('y', height - 6).attr('text-anchor', 'middle').text('α (learning rate) →');
-    svg.append('text').attr('class', 'legend-title').attr('transform', `translate(12,${m.top + (rows.length * cell) / 2}) rotate(-90)`)
-      .attr('text-anchor', 'middle').text('γ (discount) →');
-  }
-
-  return { timeSeries, countryMap, gridHeatmap, legend, formatValue, flagUrl };
+  return { timeSeries, countryMap, legend, formatValue, formatSI, siPrefix, flagUrl };
 })();

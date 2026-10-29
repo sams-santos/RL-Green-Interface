@@ -31,6 +31,9 @@ window.GreenRLReport = (() => {
     ).join('')}</div>`;
   }
 
+  // A chart's title with its unit, e.g. "Energy per episode (mJ)".
+  const titled = spec => (spec.unit ? `${spec.title} (${spec.unit})` : spec.title);
+
   function figure(title, caption, legend, svg) {
     return `<figure><figcaption><strong>${esc(title)}</strong>${caption ? `<span>${esc(caption)}</span>` : ''}</figcaption>${legend || ''}${svg}</figure>`;
   }
@@ -57,14 +60,13 @@ window.GreenRLReport = (() => {
   }
 
   function build(ctx) {
-    const { run, episode, sections, instance, specs, params, displayValue, units, durationText, gapText,
+    const { run, episode, sections, instance, specs, params, displayValue, energyText, emissionsText, durationText, gapText,
       basis, gridText, epLabel } = ctx;
     const i = episode - 1;
     const config = run.config;
     const algorithm = displayValue(params[0], config.algorithm);
-    const energy = v => `${formatValue(v * units.energyFactor)} ${units.energy}`;
-    const emissions = v => `${formatValue(v * units.emissionsFactor)} ${units.emissions} CO₂eq`;
-    const seconds = v => `${formatValue(v)} s`;
+    const energy = energyText;
+    const emissions = v => `${emissionsText(v)} CO₂eq`;
     const at = idx => (idx >= 0 ? `ep ${epLabel(idx)}` : '—');
     const range = `${epLabel(0)}–${epLabel(i)}`;
     const bestIdx = run.bestIdx[i];
@@ -84,7 +86,7 @@ window.GreenRLReport = (() => {
 
     if (sections.has('energySummary')) {
       const rows = [
-        ['Duration', run.cols.duration, 1, durationText, seconds],
+        ['Duration', run.cols.duration, 1, durationText, durationText],
         ['CPU energy', run.cols.cpu_energy, 1, energy, energy],
         ['RAM energy', run.cols.ram_energy, 1, energy, energy],
         ['Total energy', run.cols.energy_consumed, 1, energy, energy],
@@ -118,8 +120,8 @@ window.GreenRLReport = (() => {
 
     if (sections.has('energyCharts')) {
       parts.push(`<section><h2>${icon('chart-line')}Energy charts</h2>
-        ${figure(specs.energy.title, specs.energy.caption, svgs.energyLegend, svgs.energy)}
-        <div class="two-up">${figure(specs.emissions.title, specs.emissions.caption, '', svgs.emissions)}${figure(specs.duration.title, '', '', svgs.duration)}</div>
+        ${figure(titled(specs.energy), specs.energy.caption, svgs.energyLegend, svgs.energy)}
+        <div class="two-up">${figure(titled(specs.emissions), specs.emissions.caption, '', svgs.emissions)}${figure(titled(specs.duration), '', '', svgs.duration)}</div>
       </section>`);
     }
 
@@ -197,7 +199,7 @@ window.GreenRLReport = (() => {
     return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ECOVIS report · ${esc(run.id)}</title>
-<style>${REPORT_CSS}</style></head>
+<style>:root { ${liveColours()} }${REPORT_CSS}</style></head>
 <body><main>
 <header>
   <div class="eyebrow">ECOVIS · experiment report</div>
@@ -232,8 +234,15 @@ ${parts.join('\n')}
     setTimeout(() => win.print(), 300);
   }
 
+  // Data colours of the page as it is now, so a report made with the colour-blind palette keeps it.
+  function liveColours() {
+    const css = getComputedStyle(document.documentElement);
+    return ['--icon', '--tile-mint', '--ink-mint', '--tile-sky', '--ink-sky']
+      .map(name => `${name}: ${css.getPropertyValue(name).trim()};`).join(' ');
+  }
+
   const REPORT_CSS = `
-    :root { --text:#2f3a26; --muted:#676b5c; --line:#e6dec6; --grid:#efe8d5; --axis:#cdc5ab; --soft:#e5efd2; --panel:#fffaee; }
+    :root { --text:#2f3a26; --muted:#676b5c; --line:#e6dec6; --grid:#efe8d5; --axis:#cdc5ab; --panel:#fffaee; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #d2dfb6; color: var(--text); font-family: Inter, system-ui, -apple-system, "Segoe UI", Arial, sans-serif; font-size: 14.5px; }
     main { max-width: 920px; margin: 0 auto; padding: 28px 30px 40px; background: var(--panel); }
@@ -242,7 +251,7 @@ ${parts.join('\n')}
     .eyebrow { font-size: 12.5px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
     h1 { margin: 6px 0 4px; font-size: 26px; }
     header p { margin: 0; color: var(--muted); }
-    h2 { font-size: 18px; margin: 26px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--soft); }
+    h2 { font-size: 18px; margin: 26px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--tile-mint); }
     section { break-inside: avoid-page; }
     p { line-height: 1.5; color: var(--muted); }
     table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
@@ -271,8 +280,8 @@ ${parts.join('\n')}
     h3 { font-size: 15.5px; margin: 18px 0 8px; }
     .sources { font-size: 13px; color: var(--muted); padding-left: 20px; line-height: 1.6; }
     .sources a { color: var(--text); }
-    svg.icon { display: inline-block; width: 1.25em; height: 1.25em; max-width: none; vertical-align: -0.17em; margin-right: 6px; color: #4f8a34; flex: none; }
-    .flow { color: var(--text); background: var(--soft); padding: 10px 12px; border-radius: 10px; line-height: 1.9; }
+    svg.icon { display: inline-block; width: 1.25em; height: 1.25em; max-width: none; vertical-align: -0.17em; margin-right: 6px; color: var(--icon); flex: none; }
+    .flow { color: var(--text); background: var(--tile-mint); padding: 10px 12px; border-radius: 10px; line-height: 1.9; }
     .flow svg.icon { margin: 0 3px 0 0; }
     .legend-title { fill: var(--text); font-size: 13px; font-weight: 600; }
     .faint { opacity: .75; }
@@ -280,9 +289,9 @@ ${parts.join('\n')}
     .eq-card { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; break-inside: avoid; }
     .eq-card strong { display: block; font-size: 15.5px; }
     .eq-card span { color: var(--muted); font-size: 13px; }
-    .eq-icon { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #e5efd2; color: #355f22; margin-right: 8px; vertical-align: middle; }
+    .eq-icon { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: var(--tile-mint); color: var(--ink-mint); margin-right: 8px; vertical-align: middle; }
     .eq-card .eq-icon { margin-right: 0; }
-    .eq-icon.emissions { background: #e4ecef; color: #34586b; }
+    .eq-icon.emissions { background: var(--tile-sky); color: var(--ink-sky); }
     .eq-icon svg.icon { margin: 0; width: 20px; height: 20px; color: inherit; }
     .eq-badge { position: absolute; right: -4px; bottom: -4px; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; }
     .eq-badge svg.icon { width: 10px; height: 10px; }

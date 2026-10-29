@@ -27,11 +27,14 @@
     <p class="brand-tagline">See the good in green, energy-efficient reinforcement learning.</p>
     <div role="tablist" aria-orientation="vertical" class="nav-list">
       <span class="nav-label">Menu</span>
+      <button type="button" role="tab" id="tab-btn-config" aria-controls="tab-config" aria-selected="false" data-tab="config"><span class="ic" data-icon="sliders-horizontal"></span> Initial setup</button>
       <button type="button" role="tab" id="tab-btn-explore" aria-controls="tab-explore" aria-selected="true" data-tab="explore"><span class="ic" data-icon="compass"></span> Explore a run</button>
       <button type="button" role="tab" id="tab-btn-compare" aria-controls="tab-compare" aria-selected="false" data-tab="compare"><span class="ic" data-icon="git-compare"></span> Compare two runs</button>
       <span class="nav-label nav-others">Others</span>
       <button type="button" role="tab" id="tab-btn-concepts" aria-controls="tab-concepts" aria-selected="false" data-tab="concepts"><span class="ic" data-icon="book-open-text"></span> Concepts &amp; references</button>
     </div>
+    <!-- Swaps every colour that carries meaning for the Okabe–Ito colour-blind palette (remembered in this browser). -->
+    <button type="button" class="palette-btn" id="palette-btn" aria-pressed="false"><span class="ic" data-icon="eye"></span> Colour-blind palette <span class="switch" aria-hidden="true"></span></button>
    </div>
   </nav>
 
@@ -39,212 +42,157 @@
     <header class="page-title">
       <h2 id="page-title">Explore a run</h2>
       <div class="status-pill" id="status-pill">Loading…</div>
-      <span class="page-icon" id="page-icon" data-icon="compass"></span>
     </header>
 
-  <!-- Explore tab -->
+  <!-- Initial setup tab: the run opened in Explore, and the grid and units used by every view. -->
+  <div class="config-page" id="tab-config" role="tabpanel" aria-labelledby="tab-btn-config" hidden>
+    <section class="panel" id="run-settings">
+      <h2><span class="ic" data-icon="compass"></span> Run to explore</h2>
+      <div id="config-form" class="config-form"></div>
+      <p class="hint" id="dataset-count"></p>
+      <div class="button-row config-actions">
+        <button type="button" id="open-explore"><span class="ic" data-icon="compass"></span> Open in Explore a run</button>
+        <span class="hint" id="config-status"></span>
+      </div>
+    </section>
+    <section class="panel grid-settings" id="grid-settings">
+      <h2><span class="ic" data-icon="factory"></span> Electricity grid and units</h2>
+      <p>Used in every view.</p>
+      <span class="field-label" id="country-label">Electricity grid</span>
+      <div class="country-picker" id="country-picker"></div>
+      <label for="energy-unit">Energy unit</label>
+      <select id="energy-unit"></select>
+      <p class="hint">Values take the prefix that suits their size: m = thousandth, µ = millionth, k = thousand. Emissions are in grams of CO₂eq (mg, g, kg).</p>
+      <p class="hint" id="grid-info"></p>
+    </section>
+  </div>
+
+  <!-- Explore tab: the selected run, a playback bar, then the Energy and Performance views. -->
   <div class="explore" id="tab-explore" role="tabpanel" aria-labelledby="tab-btn-explore">
-    <div class="chips" id="run-chips" aria-label="Selected run"></div>
-    <div class="layout">
-    <aside class="sidebar">
-      <section class="panel">
-        <h2><span class="ic" data-icon="sliders-horizontal"></span> Configuration</h2>
-        <div id="config-form" class="config-form"></div>
-        <div class="run-id"><span>Run</span><code id="run-id">—</code></div>
-        <p class="hint" id="dataset-count"></p>
-        <div id="explore-settings-slot">
-          <!-- Grid and units: one set of controls, moved into the Compare tab while it is open. -->
-          <div class="grid-settings" id="grid-settings">
-            <h3><span class="ic" data-icon="factory"></span> Electricity grid and units</h3>
-            <span class="field-label" id="country-label">Electricity grid</span>
-            <div class="country-picker" id="country-picker"></div>
-            <div class="unit-row">
-              <div>
-                <label for="energy-unit">Energy unit</label>
-                <select id="energy-unit"></select>
+    <div class="run-bar">
+      <div class="chips" id="run-chips" aria-label="Selected run"></div>
+      <a class="change-run" href="#run-settings"><span class="ic" data-icon="sliders-horizontal"></span> Change</a>
+    </div>
+
+    <section class="panel player" aria-label="Playback">
+      <div class="button-row">
+        <button id="play-btn" type="button"><span class="ic" data-icon="play"></span> Play</button>
+        <button id="restart-btn" type="button" class="secondary icon-only" title="Restart" aria-label="Restart"><span class="ic" data-icon="rotate-ccw"></span></button>
+        <button id="end-btn" type="button" class="secondary icon-only" title="Show all episodes" aria-label="Show all episodes"><span class="ic" data-icon="skip-forward"></span></button>
+      </div>
+      <input id="episode-range" type="range" min="1" max="1000" value="1" aria-label="Show episodes up to" />
+      <div class="goto">
+        <span>Episode</span>
+        <input id="episode-input" type="number" min="0" max="1000" value="0" aria-label="Go to episode" />
+        <span>of <span id="episode-max">—</span></span>
+        <span class="badge best" id="new-best-badge" hidden><span class="ic" data-icon="star"></span> New best</span>
+      </div>
+      <select id="speed-select" aria-label="Playback speed"></select>
+      <div class="segmented" role="group" aria-label="Chart values">
+        <button type="button" data-mode="episode" class="active">Per episode</button>
+        <button type="button" data-mode="cumulative">Cumulative</button>
+      </div>
+    </section>
+
+    <section class="panel empty-state" id="empty-state" hidden>
+      <h2 id="empty-title">No results for this configuration</h2>
+      <p id="empty-text"></p>
+      <div id="nearest-runs" class="nearest-runs"></div>
+    </section>
+
+    <div id="dashboard" class="dashboard">
+      <div class="view-bar">
+      <div class="view-tabs" role="tablist" aria-label="Results">
+        <button type="button" role="tab" id="view-btn-energy" aria-controls="view-energy" aria-selected="true" data-view="energy"><span class="ic" data-icon="zap"></span> Energy</button>
+        <button type="button" role="tab" id="view-btn-performance" aria-controls="view-performance" aria-selected="false" data-view="performance"><span class="ic" data-icon="trophy"></span> Performance</button>
+      </div>
+      <button id="report-btn" type="button" class="change-run"><span class="ic" data-icon="file-down"></span> Export report</button>
+      </div>
+
+      <!-- Energy: what the run consumed and emitted, up to the current episode. -->
+      <div class="view" id="view-energy" role="tabpanel" aria-labelledby="view-btn-energy">
+        <div class="top-row">
+          <!-- One board: time, then CPU + RAM = E, E × C = CO2eq (each value with its run total). -->
+          <section class="panel energy-board">
+            <div class="board-head">
+              <div class="board-time" id="board-time"></div>
+              <div class="board-split">
+                <span class="flow-label"><span class="ic" data-icon="sigma"></span> Where the energy goes</span>
+                <div id="energy-share"></div>
+                <p class="chart-caption" id="flow-caption"></p>
               </div>
+            </div>
+            <div class="flow" id="flow"></div>
+          </section>
+          <!-- The score panel sits here in the Energy view and is moved to the Performance view with it. -->
+          <div class="score-slot" id="score-slot-energy">
+            <section class="panel score-panel" id="score-panel">
+              <h3><span class="ic" data-icon="trophy"></span> ECOVIS score</h3>
+              <div id="explore-score"></div>
+              <div id="explore-weight"></div>
+            </section>
+          </div>
+        </div>
+
+        <!-- Three charts: one large, two small; clicking a small chart makes it the large one. -->
+        <div class="deck" id="energy-deck">
+          <section class="panel deck-main">
+            <div class="panel-header">
               <div>
-                <label for="emissions-unit">Emissions unit</label>
-                <select id="emissions-unit"></select>
+                <h3><span class="deck-icon"></span> <span class="deck-title"></span> <span class="unit-badge deck-unit"></span></h3>
+                <p class="deck-caption"></p>
               </div>
+              <div class="legend deck-legend"></div>
             </div>
-            <p class="hint" id="grid-info"></p>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2><span class="ic" data-icon="play"></span> Playback</h2>
-        <div class="button-row">
-          <button id="play-btn" type="button"><span class="ic" data-icon="play"></span> Play</button>
-          <button id="restart-btn" type="button" class="secondary"><span class="ic" data-icon="rotate-ccw"></span> Restart</button>
-          <button id="end-btn" type="button" class="secondary"><span class="ic" data-icon="skip-forward"></span> Show all</button>
-        </div>
-        <label for="speed-select">Speed</label>
-        <select id="speed-select"></select>
-        <label for="episode-range">Show episodes up to</label>
-        <input id="episode-range" type="range" min="1" max="1000" value="1" />
-        <div class="goto">
-          <input id="episode-input" type="number" min="0" max="1000" value="0" aria-label="Go to episode" />
-          <span>of <span id="episode-max">—</span></span>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header compact">
-          <h2><span class="ic" data-icon="hourglass"></span> Current episode</h2>
-          <span class="badge best" id="new-best-badge" hidden><span class="ic" data-icon="star"></span> New best</span>
-        </div>
-        <div class="episode-number" id="episode-number">—</div>
-        <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
-        <dl class="readout" id="readout"></dl>
-      </section>
-
-      <section class="panel">
-        <h2><span class="ic" data-icon="chart-line"></span> Charts show</h2>
-        <div class="segmented" role="group" aria-label="Chart values">
-          <button type="button" data-mode="episode" class="active">Per episode</button>
-          <button type="button" data-mode="cumulative">Cumulative</button>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2><span class="ic" data-icon="file-down"></span> Report</h2>
-        <p>The run up to the current episode, as shown on the page.</p>
-        <button id="report-btn" type="button" class="wide"><span class="ic" data-icon="file-down"></span> Export report</button>
-      </section>
-    </aside>
-
-    <section class="content">
-      <section class="panel empty-state" id="empty-state" hidden>
-        <h2 id="empty-title">No results for this configuration</h2>
-        <p id="empty-text"></p>
-        <div id="nearest-runs" class="nearest-runs"></div>
-      </section>
-
-      <div id="dashboard" class="dashboard">
-        <div class="section-head">
-          <h2><span class="ic" data-icon="zap"></span> Energy &amp; emissions</h2>
-          <p>Totals up to the current episode.</p>
-        </div>
-        <div class="board-row">
-        <!-- One board: time, then CPU + RAM = E, E × C = CO2eq (each value with its run total). -->
-        <section class="panel energy-board">
-          <div class="board-head">
-            <div class="board-time" id="board-time"></div>
-            <div class="board-split">
-              <span class="flow-label"><span class="ic" data-icon="sigma"></span> Where the energy goes</span>
-              <div id="energy-share"></div>
-              <p class="chart-caption" id="flow-caption"></p>
-            </div>
-          </div>
-          <div class="flow" id="flow"></div>
-        </section>
-
-        <div class="board-side">
-          <section class="panel score-panel">
-            <h3><span class="ic" data-icon="trophy"></span> ECOVIS score</h3>
-            <div id="explore-score"></div>
-            <div id="explore-weight"></div>
+            <div class="chart tall deck-chart"></div>
           </section>
-        </div>
-        </div>
-
-        <section class="insights" aria-labelledby="insights-title">
-          <h3 id="insights-title"><span class="ic" data-icon="lightbulb"></span> Insights</h3>
-          <div class="insight-tabs" role="tablist" aria-label="Insights">
-            <button type="button" role="tab" data-insight="run" aria-selected="true">This run</button>
-            <button type="button" role="tab" data-insight="algorithm" aria-selected="false">Algorithm</button>
-            <button type="button" role="tab" data-insight="instance" aria-selected="false">Instance</button>
-            <button type="button" role="tab" data-insight="exploration" aria-selected="false">Exploration</button>
+          <div class="deck-thumbs">
+            <button type="button" class="panel deck-thumb"></button>
+            <button type="button" class="panel deck-thumb"></button>
           </div>
-          <div class="insight-body" id="insight-body" role="tabpanel"></div>
-        </section>
-
-        <section class="panel">
-          <h3><span class="ic" data-icon="zap"></span> Energy by algorithm</h3>
-          <p class="chart-caption" id="algos-caption"></p>
-          <div id="algos"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-header">
-            <div>
-              <h3><span class="ic" data-icon="zap"></span> <span id="energy-title"></span></h3>
-              <p id="energy-caption"></p>
-            </div>
-            <div class="legend" id="energy-legend"></div>
-          </div>
-          <div id="energy-chart" class="chart"></div>
-        </section>
-
-        <div class="charts-grid">
-          <section class="panel">
-            <h3><span class="ic" data-icon="cloud"></span> <span id="emissions-title"></span></h3>
-            <p class="chart-caption" id="emissions-caption"></p>
-            <div id="emissions-chart" class="chart"></div>
-          </section>
-          <section class="panel">
-            <h3><span class="ic" data-icon="timer"></span> <span id="duration-title"></span></h3>
-            <div id="duration-chart" class="chart"></div>
-          </section>
         </div>
 
         <section class="panel">
           <h3><span class="ic" data-icon="globe"></span> Emissions of this run in every country</h3>
           <p class="chart-caption" id="country-caption"></p>
-          <div id="country-chart" class="chart country"></div>
-          <div class="map-facts" id="country-facts"></div>
-        </section>
-
-        <div class="section-head">
-          <h2><span class="ic" data-icon="lightbulb"></span> In everyday terms</h2>
-          <p id="eq-scope"></p>
-        </div>
-        <section class="panel">
-          <h3><span class="ic" data-icon="scale"></span> What this compares to</h3>
-          <p class="chart-caption">[n] = reference in <a href="#c-refs">Concepts &amp; references</a>.</p>
-          <div id="eq-cards" class="eq-groups"></div>
-        </section>
-        <section class="panel">
-          <h3><span class="ic" data-icon="calendar-range"></span> If you ran this every day</h3>
-          <p class="chart-caption">The same run, once a day.</p>
-          <div class="table-wrap"><table class="compare-table eq-table" id="eq-projection"></table></div>
-        </section>
-
-        <div class="section-head">
-          <h2><span class="ic" data-icon="trophy"></span> Performance</h2>
-          <p>Tour length: lower is better.</p>
-        </div>
-        <div class="metrics-grid" id="perf-kpis"></div>
-
-        <div class="perf-grid">
-          <section class="panel">
-            <div class="panel-header">
-              <h3><span class="ic" data-icon="route"></span> Distance per episode</h3>
-              <div class="legend" id="distance-legend"></div>
-            </div>
-            <p class="chart-caption" id="distance-caption"></p>
-            <div id="distance-chart" class="chart tall"></div>
-          </section>
-        </div>
-
-        <section class="panel">
-          <h3><span class="ic" data-icon="sliders-horizontal"></span> Every α × γ with these settings</h3>
-          <p class="chart-caption" id="grid-caption"></p>
-          <div class="heatmaps">
-            <div>
-              <h4><span class="ic" data-icon="target"></span> Gap to optimum</h4>
-              <div id="grid-gap" class="chart heat"></div>
-            </div>
-            <div>
-              <h4><span class="ic" data-icon="zap"></span> <span id="grid-energy-title">Total energy</span></h4>
-              <div id="grid-energy" class="chart heat"></div>
-            </div>
+          <!-- The map takes the width; the cleanest, selected and dirtiest grids sit in a column on its right. -->
+          <div class="map-layout">
+            <div id="country-chart" class="chart country"></div>
+            <div class="map-facts" id="country-facts"></div>
           </div>
         </section>
+
+        <section class="panel">
+          <h3><span class="ic" data-icon="calendar-range"></span> If you ran this every day</h3>
+          <p class="chart-caption"><span id="eq-scope"></span> · [n] = <a href="#c-refs">reference</a></p>
+          <div class="table-wrap"><table class="compare-table eq-table" id="eq-projection"></table></div>
+        </section>
       </div>
-    </section>
+
+      <!-- Performance: how good the tours are. -->
+      <div class="view" id="view-performance" role="tabpanel" aria-labelledby="view-btn-performance" hidden>
+        <div class="top-row">
+          <div class="metrics-grid" id="perf-kpis"></div>
+          <div class="score-slot" id="score-slot-performance"></div>
+        </div>
+
+        <div class="deck" id="performance-deck">
+          <section class="panel deck-main">
+            <div class="panel-header">
+              <div>
+                <h3><span class="deck-icon"></span> <span class="deck-title"></span> <span class="unit-badge deck-unit"></span></h3>
+                <p class="deck-caption"></p>
+              </div>
+              <div class="legend deck-legend"></div>
+            </div>
+            <div class="chart tall deck-chart"></div>
+          </section>
+          <div class="deck-thumbs">
+            <button type="button" class="panel deck-thumb"></button>
+            <button type="button" class="panel deck-thumb"></button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -264,18 +212,12 @@
     </div>
 
     <section class="panel compare-config">
-      <h2><span class="ic" data-icon="sliders-horizontal"></span> Configuration for both runs</h2>
-      <div class="compare-config-body">
-        <div id="compare-settings-slot"></div>
-        <div>
-          <h3><span class="ic" data-icon="repeat"></span> Episodes</h3>
-          <label for="cmp-range">Compare episodes up to</label>
-          <div class="range-row">
-            <input id="cmp-range" type="range" min="1" max="1000" value="1000" />
-            <span id="cmp-range-label"></span>
-            <button id="cmp-all" type="button" class="secondary"><span class="ic" data-icon="skip-forward"></span> All episodes</button>
-          </div>
-        </div>
+      <div class="range-row">
+        <label for="cmp-range"><span class="ic" data-icon="repeat"></span> Compare episodes up to</label>
+        <input id="cmp-range" type="range" min="1" max="1000" value="1000" />
+        <span id="cmp-range-label"></span>
+        <button id="cmp-all" type="button" class="secondary"><span class="ic" data-icon="skip-forward"></span> All episodes</button>
+        <a class="change-run" href="#grid-settings"><span class="ic" data-icon="factory"></span> Grid and units</a>
       </div>
     </section>
 
@@ -294,12 +236,6 @@
           <button type="button" id="cmp-greenest"><span class="ic" data-icon="leaf"></span> <span id="cmp-greenest-label">Compare A with the greenest run</span></button>
         </div>
       </section>
-
-      <section class="panel">
-          <h3><span class="ic" data-icon="zap"></span> Energy by algorithm</h3>
-          <p class="chart-caption" id="cmp-algos-caption"></p>
-          <div id="cmp-algos"></div>
-        </section>
 
       <section class="panel">
         <div class="panel-header">
@@ -321,11 +257,11 @@
           <div id="cmp-distance-chart" class="chart"></div>
         </section>
         <section class="panel">
-          <div class="panel-header"><h3><span class="ic" data-icon="zap"></span> <span id="cmp-energy-title">Cumulative energy</span></h3><div class="legend cmp-legend"></div></div>
+          <div class="panel-header"><h3><span class="ic" data-icon="zap"></span> Cumulative energy <span class="unit-badge" id="cmp-energy-unit"></span></h3><div class="legend cmp-legend"></div></div>
           <div id="cmp-energy-chart" class="chart"></div>
         </section>
         <section class="panel">
-          <div class="panel-header"><h3><span class="ic" data-icon="cloud"></span> <span id="cmp-emissions-title">Cumulative emissions</span></h3><div class="legend cmp-legend"></div></div>
+          <div class="panel-header"><h3><span class="ic" data-icon="cloud"></span> <span id="cmp-emissions-title">Cumulative emissions</span> <span class="unit-badge" id="cmp-emissions-unit"></span></h3><div class="legend cmp-legend"></div></div>
           <div id="cmp-emissions-chart" class="chart"></div>
         </section>
       </div>
@@ -438,7 +374,7 @@
 
       <section class="panel concept" id="c-energy">
         <h2><span class="ic" data-icon="gauge"></span> How energy is measured</h2>
-        <p>Energy is given in <strong>kilowatt-hours (kWh)</strong>: 1 kWh is 1,000 W used for one hour. The values here are tiny, around 10<sup>−9</sup> kWh per episode, because one tabular episode lasts less than a millisecond.</p>
+        <p>Energy is measured in <strong>kilowatt-hours (kWh)</strong>: 1 kWh is 1,000 W used for one hour. The values here are tiny, around 10<sup>−9</sup> to 10<sup>−8</sup> kWh per episode, because one tabular episode lasts less than a millisecond. So the platform shows energy in <strong>joules</strong> (1 kWh = 3.6 million J) with the prefix that suits each value: 10<sup>−8</sup> kWh is 36 mJ (millijoules). Watt-hours can be chosen in Initial setup.</p>
         <dl class="terms">
           <dt><span class="ic" data-icon="cpu"></span> CPU</dt>
           <dd>Read from <strong>RAPL</strong> (Running Average Power Limit), energy counters built into Intel and AMD processors <a class="cite" href="#ref-20">[20]</a> <a class="cite" href="#ref-21">[21]</a>. CodeCarbon 3.3.1 wraps each episode in <code>start_task</code> / <code>stop_task</code>: the episode's energy is the difference between the counter readings at the start and at the end <a class="cite" href="#ref-29">[29]</a>. The tracker was set to add the DRAM domain to this reading and to prefer the platform (psys) domain when the machine has one, so the CPU column can cover more than the processor <a class="cite" href="#ref-20">[20]</a>.</dd>
@@ -488,16 +424,16 @@
         <p>Each index, and the score, is split into five ratings at the 20 %, 40 %, 60 % and 80 % quantiles of all its values on the instance <a class="cite" href="#ref-27">[27]</a> <a class="cite" href="#ref-28">[28]</a>. A is the top fifth, E the bottom fifth. The <strong>energy label</strong> of a run is the rating of its energy index. The labels take their look from the EU energy label, as in <a class="cite" href="#ref-27">[27]</a>.</p>
         <table class="mapping grades">
           <tbody>
-            <tr><th><span class="score-letter small" style="background:#2f7d4f">A</span></th><td>at or above the 80 % quantile</td></tr>
-            <tr><th><span class="score-letter small" style="background:#7fa83a">B</span></th><td>60–80 %</td></tr>
-            <tr><th><span class="score-letter small" style="background:#e2b622">C</span></th><td>40–60 %</td></tr>
-            <tr><th><span class="score-letter small" style="background:#e08a2a">D</span></th><td>20–40 %</td></tr>
-            <tr><th><span class="score-letter small" style="background:#b1527a">E</span></th><td>below the 20 % quantile</td></tr>
+            <tr><th><span class="score-letter small" style="background:var(--grade-a);color:var(--grade-a-ink)">A</span></th><td>at or above the 80 % quantile</td></tr>
+            <tr><th><span class="score-letter small" style="background:var(--grade-b);color:var(--grade-b-ink)">B</span></th><td>60–80 %</td></tr>
+            <tr><th><span class="score-letter small" style="background:var(--grade-c);color:var(--grade-c-ink)">C</span></th><td>40–60 %</td></tr>
+            <tr><th><span class="score-letter small" style="background:var(--grade-d);color:var(--grade-d-ink)">D</span></th><td>20–40 %</td></tr>
+            <tr><th><span class="score-letter small" style="background:var(--grade-e);color:var(--grade-e-ink)">E</span></th><td>below the 20 % quantile</td></tr>
           </tbody>
         </table>
 
         <h3>Example</h3>
-        <p>Q-learning on berlin52 (R1, linear decay, ε₀ = 0.10, α = 0.15, γ = 0.90) finds a best tour of 20,261 and uses 5.613 × 10<sup>−6</sup> kWh. On berlin52 the shortest best tour is 7,866 and the lowest energy is 4.041 × 10<sup>−6</sup> kWh:</p>
+        <p>Q-learning on berlin52 (R1, linear decay, ε₀ = 0.10, α = 0.15, γ = 0.90) finds a best tour of 20,261 and uses 5.613 × 10<sup>−6</sup> kWh (20.2 J). On berlin52 the shortest best tour is 7,866 and the lowest energy is 4.041 × 10<sup>−6</sup> kWh:</p>
         <ul class="plain">
           <li>p<sub>tour</sub> = 7,866 ÷ 20,261 ≈ <strong>0.39</strong> → rating E (the 20 % quantile is 0.53)</li>
           <li>p<sub>energy</sub> = 4.041 ÷ 5.613 ≈ <strong>0.72</strong> → rating A (the 80 % quantile is 0.60)</li>
@@ -517,8 +453,12 @@
           <dd>The shortest tour found up to each episode; it can only go down. <span class="ic" data-icon="star"></span> marks an episode that sets a new best.</dd>
           <dt>ECOVIS score</dt>
           <dd>A 0–100 score of a whole run against every run on its instance, with a rating A–E, following Fischer et al. <a class="cite" href="#ref-27">[27]</a> <a class="cite" href="#ref-28">[28]</a>. See <a href="#c-score">How the ECOVIS score is calculated</a>.</dd>
-          <dt>α × γ grid</dt>
-          <dd>The 64 runs that share every other setting, one cell each, coloured by gap to optimum or total energy. Lighter is lower; ★ marks the lowest; the outlined cell is the open run.</dd>
+          <dt>Large and small charts</dt>
+          <dd>Each view shows one chart large and two small ones below it. Click a small chart to show it large.</dd>
+          <dt>Colour-blind palette</dt>
+          <dd>The button under the menu swaps every colour that carries meaning (charts, map, ratings, highlights, buttons and icons) for the palette of Okabe and Ito, designed to be told apart with every common type of colour blindness <a class="cite" href="#ref-31">[31]</a>. Letters, labels and legends always repeat what a colour shows.</dd>
+          <dt>Units</dt>
+          <dd>Energy is in joules (or watt-hours) and emissions in grams of CO₂eq, with the prefix that suits each value: 1 mJ = 0.001 J, 1 µJ = 0.000001 J, 1 kJ = 1,000 J.</dd>
           <dt>Compare</dt>
           <dd>Two runs side by side; ✓ marks the lower (better) value.</dd>
         </dl>
@@ -583,6 +523,11 @@
         <h3>ECOVIS</h3>
         <ol class="refs" start="30">
           <li id="ref-30">Santos, S., Medeiros, L., Ottoni, A. L. C., Borgo, R. &amp; Nepomuceno, E. (2026). ECOVIS: A Design Study for Visualising Energy Consumption in Green Machine Learning. In <em>Computer Graphics and Visual Computing (CGVC 2026)</em>, Y. Sheng &amp; M. Elshehaly (Eds.). The Eurographics Association. <a href="https://doi.org/10.2312/cgvc.20261003" target="_blank" rel="noopener">doi:10.2312/cgvc.20261003</a></li>
+        </ol>
+
+        <h3>Colour</h3>
+        <ol class="refs" start="31">
+          <li id="ref-31">Okabe, M. &amp; Ito, K. (2008). <em>Color Universal Design (CUD): How to make figures and presentations that are friendly to colorblind people</em>. J*Fly. <a href="https://jfly.uni-koeln.de/color/" target="_blank" rel="noopener">jfly.uni-koeln.de/color</a></li>
         </ol>
       </section>
     </article>
